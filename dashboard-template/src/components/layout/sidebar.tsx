@@ -6,6 +6,7 @@ import {
   BarChart3,
   Settings,
   Boxes,
+  ClipboardList,
   X,
 } from "lucide-react"
 
@@ -18,6 +19,11 @@ const navItems = [
   { to: "/customers", label: "Clientes", icon: Users },
   { to: "/analytics", label: "Analítica", icon: BarChart3 },
   { to: "/products", label: "Productos", icon: Boxes },
+  {
+    to: "/solicitud-servicios",
+    label: "Solicitud de Servicios",
+    icon: ClipboardList,
+  },
   { to: "/settings", label: "Configuración", icon: Settings },
 ]
 

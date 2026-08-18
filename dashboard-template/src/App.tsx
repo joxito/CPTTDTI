@@ -7,6 +7,7 @@ import CustomersPage from "@/pages/customers"
 import AnalyticsPage from "@/pages/analytics"
 import ProductsPage from "@/pages/products"
 import SettingsPage from "@/pages/settings"
+import ServiceRequestPage from "@/pages/service-request"
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/products" element={<ProductsPage />} />
+        <Route path="/solicitud-servicios" element={<ServiceRequestPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
     </Routes>
