@@ -230,9 +230,11 @@ export default function ServiceRequestPage({
               Recibimos tu solicitud de servicios. El equipo del CPTTL
               se va a contactar contigo a la brevedad.
             </CardDescription>
-            <Button variant="outline" onClick={() => setSubmitted(false)}>
-              Enviar otra solicitud
-            </Button>
+            {!standalone && (
+              <Button variant="outline" onClick={() => setSubmitted(false)}>
+                Enviar otra solicitud
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
