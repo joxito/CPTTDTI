@@ -39,8 +39,11 @@ create policy "Cualquiera puede enviar una solicitud"
   to anon
   with check (true);
 
--- Solo usuarios autenticados (personal del CPTTL) pueden ver las solicitudes.
-create policy "Usuarios autenticados pueden ver las solicitudes"
+-- Sin login todavía en el dashboard: cualquiera con la anon key puede leer
+-- las solicitudes. Esto expone datos personales (cédula, teléfono, correo)
+-- a quien inspeccione las peticiones de red del sitio. Revisar cuando se
+-- agregue autenticación al dashboard.
+create policy "Cualquiera puede ver las solicitudes"
   on service_requests for select
-  to authenticated
+  to anon, authenticated
   using (true);
