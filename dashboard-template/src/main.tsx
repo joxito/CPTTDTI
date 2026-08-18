@@ -7,7 +7,7 @@ import { ThemeProvider } from '@/hooks/use-theme'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider defaultTheme="system">
+    <ThemeProvider defaultTheme="light">
       <BrowserRouter>
         <App />
       </BrowserRouter>
