@@ -47,3 +47,11 @@ create policy "Cualquiera puede ver las solicitudes"
   on service_requests for select
   to anon, authenticated
   using (true);
+
+-- Sin login todavía: cualquiera con la anon key puede editar una solicitud
+-- desde el panel de Clientes. Revisar cuando se agregue autenticación.
+create policy "Cualquiera puede editar las solicitudes"
+  on service_requests for update
+  to anon, authenticated
+  using (true)
+  with check (true);

@@ -18,73 +18,18 @@ import { MultiCombobox } from "@/components/ui/multi-combobox"
 import { Textarea } from "@/components/ui/textarea"
 import { dominicanProvinces } from "@/data/provinces"
 import { municipalitiesByProvince } from "@/data/municipalities"
+import {
+  sectorOptions,
+  serviceOptions,
+  referralOptions,
+} from "@/data/service-request-options"
+import {
+  emailPattern,
+  validAreaCodes,
+  formatPhoneNumber,
+  formatCedula,
+} from "@/lib/format"
 import { supabase } from "@/lib/supabase"
-
-const sectorOptions = [
-  "Manufactura",
-  "Comercio",
-  "Metalmecánica",
-  "Servicios",
-  "Artesanías",
-  "Belleza y Cuidado de la Piel",
-  "Cosmético",
-  "Metalurgia",
-  "Alimentos y bebidas",
-  "Otro",
-]
-
-const serviceOptions = [
-  "Diseño de modelos 3D",
-  "Digitalización de modelos 3D",
-  "Rediseño y adaptación de modelos 3D",
-  "Fabricación de prototipos",
-  "Diseños de planos",
-  "Digitalización de procesos",
-  "Capacitaciones técnicas especializadas",
-  "Aplicación metodología 6S",
-  "Estandarización de procesos industriales",
-  "Asistencia técnica especializada",
-]
-
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-const validAreaCodes = ["809", "829", "849"]
-
-function formatPhoneNumber(rawValue: string) {
-  const digits = rawValue.replace(/\D/g, "").slice(0, 10)
-  const areaCode = digits.slice(0, 3)
-  const middle = digits.slice(3, 6)
-  const last = digits.slice(6, 10)
-
-  let formatted = areaCode
-  if (middle) formatted += `-${middle}`
-  if (last) formatted += `-${last}`
-
-  return formatted
-}
-
-function formatCedula(rawValue: string) {
-  const digits = rawValue.replace(/\D/g, "").slice(0, 11)
-  const office = digits.slice(0, 3)
-  const sequence = digits.slice(3, 10)
-  const checkDigit = digits.slice(10, 11)
-
-  let formatted = office
-  if (sequence) formatted += `-${sequence}`
-  if (checkDigit) formatted += `-${checkDigit}`
-
-  return formatted
-}
-
-const referralOptions = [
-  "Redes Sociales",
-  "Charlas o Capacitaciones",
-  "Ferias",
-  "Eventos",
-  "Por referencia de alguien",
-  "Por el Instituto Politécnico Loyola",
-  "Otro",
-]
 
 function RequiredMark() {
   return <span className="text-destructive">*</span>
