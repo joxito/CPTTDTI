@@ -1,0 +1,6 @@
+{
+  "installCommand": "cd dashboard-template && npm install",
+  "buildCommand": "cd dashboard-template && npm run build",
+  "outputDirectory": "dashboard-template/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}

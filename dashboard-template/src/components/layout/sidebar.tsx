@@ -1,24 +1,20 @@
 import { NavLink } from "react-router-dom"
 import {
   LayoutDashboard,
-  ShoppingCart,
   Users,
-  BarChart3,
   Settings,
-  Boxes,
   ClipboardList,
+  LogOut,
   X,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/orders", label: "Órdenes", icon: ShoppingCart },
   { to: "/customers", label: "Clientes", icon: Users },
-  { to: "/analytics", label: "Analítica", icon: BarChart3 },
-  { to: "/products", label: "Productos", icon: Boxes },
   {
     to: "/solicitud-servicios",
     label: "Solicitud de Servicios",
@@ -52,10 +48,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       >
         <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
           <div className="flex items-center gap-2 font-semibold">
-            <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Boxes className="size-4" />
-            </div>
-            <span>Mi Dashboard</span>
+            <span>CPTTL</span>
           </div>
           <Button
             variant="ghost"
@@ -90,8 +83,30 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           ))}
         </nav>
 
-        <div className="border-t border-sidebar-border p-3 text-xs text-sidebar-foreground/60">
-          Plantilla base — reemplazá esto por tu propio contenido.
+        <div className="border-t border-sidebar-border p-3">
+          <div className="flex items-center gap-3 rounded-md px-2 py-2">
+            <Avatar>
+              <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground">
+                TU
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-sidebar-foreground">
+                Usuario
+              </p>
+              <p className="truncate text-xs text-sidebar-foreground/60">
+                Admin
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              aria-label="Cerrar sesión"
+            >
+              <LogOut className="size-4" />
+            </Button>
+          </div>
         </div>
       </aside>
     </>

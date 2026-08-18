@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { ClipboardList, CheckCircle2 } from "lucide-react"
+import { useRef, useState } from "react"
+import { Check, CheckCircle2, Link as LinkIcon, Signature } from "lucide-react"
 
 import {
   Card,
@@ -13,10 +13,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
+import { Combobox } from "@/components/ui/combobox"
+import { MultiCombobox } from "@/components/ui/multi-combobox"
 import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Radio } from "@/components/ui/radio"
 import { dominicanProvinces } from "@/data/provinces"
+import { municipalitiesByProvince } from "@/data/municipalities"
+import { supabase } from "@/lib/supabase"
 
 const sectorOptions = [
   "Manufactura",
@@ -44,6 +46,36 @@ const serviceOptions = [
   "Asistencia técnica especializada",
 ]
 
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+const validAreaCodes = ["809", "829", "849"]
+
+function formatPhoneNumber(rawValue: string) {
+  const digits = rawValue.replace(/\D/g, "").slice(0, 10)
+  const areaCode = digits.slice(0, 3)
+  const middle = digits.slice(3, 6)
+  const last = digits.slice(6, 10)
+
+  let formatted = areaCode
+  if (middle) formatted += `-${middle}`
+  if (last) formatted += `-${last}`
+
+  return formatted
+}
+
+function formatCedula(rawValue: string) {
+  const digits = rawValue.replace(/\D/g, "").slice(0, 11)
+  const office = digits.slice(0, 3)
+  const sequence = digits.slice(3, 10)
+  const checkDigit = digits.slice(10, 11)
+
+  let formatted = office
+  if (sequence) formatted += `-${sequence}`
+  if (checkDigit) formatted += `-${checkDigit}`
+
+  return formatted
+}
+
 const referralOptions = [
   "Redes Sociales",
   "Charlas o Capacitaciones",
@@ -58,18 +90,135 @@ function RequiredMark() {
   return <span className="text-destructive">*</span>
 }
 
-export default function ServiceRequestPage() {
+type ServiceRequestPageProps = {
+  standalone?: boolean
+}
+
+export default function ServiceRequestPage({
+  standalone = false,
+}: ServiceRequestPageProps) {
   const [submitted, setSubmitted] = useState(false)
   const [sector, setSector] = useState("")
   const [referral, setReferral] = useState("")
+  const [hasRnc, setHasRnc] = useState("")
+  const [province, setProvince] = useState("")
+  const [municipality, setMunicipality] = useState("")
+  const [phone, setPhone] = useState("")
+  const [idNumber, setIdNumber] = useState("")
+  const [idPhotosError, setIdPhotosError] = useState("")
+  const [email, setEmail] = useState("")
+  const [emailTouched, setEmailTouched] = useState(false)
+  const [services, setServices] = useState<string[]>([])
+  const [step, setStep] = useState<1 | 2>(1)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState("")
+  const section1Ref = useRef<HTMLDivElement>(null)
+  const section2Ref = useRef<HTMLDivElement>(null)
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleCopyLink() {
+    const publicUrl = `${window.location.origin}/solicitud-servicios/publico`
+    await navigator.clipboard.writeText(publicUrl)
+    setLinkCopied(true)
+    setTimeout(() => setLinkCopied(false), 2000)
+  }
+
+  function renderShell(content: React.ReactNode) {
+    if (!standalone) return content
+
+    return (
+      <div className="min-h-screen bg-muted/30 px-4 py-8 md:px-6">
+        <div className="mx-auto mb-6 flex max-w-3xl items-center gap-2 font-semibold">
+          <img
+            src="/cptt-logo.jpg"
+            alt="CPTTL"
+            className="h-9 w-auto rounded-sm"
+          />
+          <span>CPTTL</span>
+        </div>
+        {content}
+      </div>
+    )
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    const section1Controls = Array.from(
+      section1Ref.current?.querySelectorAll<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >("input, select, textarea") ?? []
+    )
+    const section2Controls = Array.from(
+      section2Ref.current?.querySelectorAll<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >("input, select, textarea") ?? []
+    )
+
+    const firstInvalidInSection1 = section1Controls.find(
+      (control) => !control.checkValidity()
+    )
+    const firstInvalidInSection2 = section2Controls.find(
+      (control) => !control.checkValidity()
+    )
+    const firstInvalid = firstInvalidInSection1 ?? firstInvalidInSection2
+
+    if (firstInvalid) {
+      setStep(firstInvalidInSection1 ? 1 : 2)
+      setTimeout(() => firstInvalid.reportValidity(), 0)
+      return
+    }
+
+    const formData = new FormData(event.currentTarget)
+    setSubmitting(true)
+    setSubmitError("")
+
+    const { error } = await supabase.from("service_requests").insert({
+      business_name: formData.get("businessName"),
+      has_rnc: formData.get("hasRnc"),
+      rnc_number: formData.get("rncNumber") || null,
+      province: formData.get("province"),
+      municipality: formData.get("municipality"),
+      representative_name: formData.get("representativeName"),
+      sex: formData.get("sex"),
+      age: Number(formData.get("age")),
+      phone: formData.get("phone"),
+      is_owner: formData.get("isOwner"),
+      id_number: formData.get("idNumber"),
+      email: formData.get("email"),
+      sector: formData.get("sector"),
+      sector_other: formData.get("sectorOther") || null,
+      business_description: formData.get("businessDescription"),
+      start_date: formData.get("startDate"),
+      employee_count: Number(formData.get("employeeCount")),
+      address: formData.get("address") || null,
+      services,
+      referral: formData.get("referral"),
+      referral_other: formData.get("referralOther") || null,
+      confidentiality: formData.get("confidentiality"),
+    })
+
+    setSubmitting(false)
+
+    if (error) {
+      setSubmitError(
+        "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
+      )
+      return
+    }
+
     setSubmitted(true)
   }
 
+  const phoneAreaCode = phone.slice(0, 3)
+  const isPhoneAreaCodeInvalid =
+    phoneAreaCode.length === 3 && !validAreaCodes.includes(phoneAreaCode)
+
+  const isEmailInvalid =
+    emailTouched && email.length > 0 && !emailPattern.test(email)
+
   if (submitted) {
-    return (
+    return renderShell(
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
@@ -78,7 +227,7 @@ export default function ServiceRequestPage() {
             </div>
             <CardTitle>Solicitud enviada</CardTitle>
             <CardDescription>
-              Recibimos tu solicitud de servicios. El equipo del CPTT-Loyola
+              Recibimos tu solicitud de servicios. El equipo del CPTTL
               se va a contactar contigo a la brevedad.
             </CardDescription>
             <Button variant="outline" onClick={() => setSubmitted(false)}>
@@ -90,35 +239,42 @@ export default function ServiceRequestPage() {
     )
   }
 
-  return (
+  return renderShell(
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
-      <div>
+      <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">
-          Solicitud de Servicios – Centro de Prototipado
+          Solicitud de Servicios
         </h1>
-        <p className="text-sm text-muted-foreground">
-          Centro de Prototipado y Transferencia Tecnológica (CPTT-LOYOLA)
-        </p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Este formulario es para hacer solicitud de los servicios de
-          asesoría del Centro de Prototipado y Transferencia Tecnológica
-          CPTT-LOYOLA. Los campos marcados con (<RequiredMark />) son
-          obligatorios.
-        </p>
+        {!standalone && (
+          <Button type="button" variant="outline" onClick={handleCopyLink}>
+            {linkCopied ? (
+              <>
+                <Check className="size-4" />
+                Enlace copiado
+              </>
+            ) : (
+              <>
+                <LinkIcon className="size-4" />
+                Enviar a un cliente
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-        <Card>
-          <CardHeader>
-            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <ClipboardList className="size-5" />
-            </div>
-            <CardTitle className="mt-3">
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        className="flex flex-col gap-6"
+      >
+        <Card ref={section1Ref} className={step !== 1 ? "hidden" : undefined}>
+          <CardHeader className="border-b pb-4">
+            <CardTitle className="text-lg font-semibold">
               Sección 1 — Datos del Negocio y del Representante
             </CardTitle>
           </CardHeader>
 
-          <CardContent className="flex flex-col gap-5 pb-6">
+          <CardContent className="flex flex-col gap-5 pt-6 pb-6">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="businessName">
                 1. Nombre del Negocio o Emprendimiento <RequiredMark />
@@ -127,55 +283,79 @@ export default function ServiceRequestPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label>
+              <Label htmlFor="hasRnc">
                 2. ¿Posee RNC? <RequiredMark />
               </Label>
-              <div className="flex gap-6">
-                <label className="flex items-center gap-2 text-sm">
-                  <Radio name="hasRnc" value="si" required /> Sí
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <Radio name="hasRnc" value="no" /> No
-                </label>
-              </div>
+              <Select
+                id="hasRnc"
+                name="hasRnc"
+                value={hasRnc}
+                onChange={(event) => setHasRnc(event.target.value)}
+                required
+              >
+                <option value="">
+                  Seleccioná una opción
+                </option>
+                <option value="si">Sí</option>
+                <option value="no">No</option>
+              </Select>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="rncNumber">
-                3. Número de RNC (si aplica) / N.º de cédula si es persona
-                física
-              </Label>
-              <Input id="rncNumber" name="rncNumber" />
-            </div>
+            {hasRnc === "si" && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="rncNumber">
+                  Número de RNC (si aplica) / N.º de cédula si es persona
+                  física <RequiredMark />
+                </Label>
+                <Input id="rncNumber" name="rncNumber" required />
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="province">
-                  4. ¿En cuál provincia se encuentra la empresa?{" "}
+                  3. ¿En cuál provincia se encuentra la empresa?{" "}
                   <RequiredMark />
                 </Label>
-                <Select id="province" name="province" defaultValue="" required>
-                  <option value="" disabled>
-                    Seleccioná una provincia
-                  </option>
-                  {dominicanProvinces.map((province) => (
-                    <option key={province} value={province}>
-                      {province}
-                    </option>
-                  ))}
-                </Select>
+                <Combobox
+                  id="province"
+                  name="province"
+                  value={province}
+                  onValueChange={(next) => {
+                    setProvince(next)
+                    setMunicipality("")
+                  }}
+                  options={dominicanProvinces}
+                  placeholder="Seleccioná una provincia"
+                  searchPlaceholder="Buscar provincia..."
+                  required
+                />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="municipality">
-                  5. Municipio <RequiredMark />
+                  4. Municipio <RequiredMark />
                 </Label>
-                <Input id="municipality" name="municipality" required />
+                <Combobox
+                  id="municipality"
+                  name="municipality"
+                  value={municipality}
+                  onValueChange={setMunicipality}
+                  options={municipalitiesByProvince[province] ?? []}
+                  placeholder={
+                    province
+                      ? "Seleccioná un municipio"
+                      : "Primero seleccioná una provincia"
+                  }
+                  searchPlaceholder="Buscar municipio..."
+                  disabled={!province}
+                  required
+                />
               </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="representativeName">
-                6. Nombre y apellido del representante <RequiredMark />
+                5. Nombre y apellido del representante <RequiredMark />
               </Label>
               <Input
                 id="representativeName"
@@ -186,21 +366,20 @@ export default function ServiceRequestPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
-                <Label>
-                  7. Sexo <RequiredMark />
+                <Label htmlFor="sex">
+                  6. Sexo <RequiredMark />
                 </Label>
-                <div className="flex gap-6">
-                  <label className="flex items-center gap-2 text-sm">
-                    <Radio name="sex" value="femenino" required /> Femenino
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Radio name="sex" value="masculino" /> Masculino
-                  </label>
-                </div>
+                <Select id="sex" name="sex" defaultValue="" required>
+                  <option value="">
+                    Seleccioná una opción
+                  </option>
+                  <option value="femenino">Femenino</option>
+                  <option value="masculino">Masculino</option>
+                </Select>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="age">
-                  8. Edad <RequiredMark />
+                  7. Edad <RequiredMark />
                 </Label>
                 <Input id="age" name="age" type="number" min={0} required />
               </div>
@@ -209,36 +388,66 @@ export default function ServiceRequestPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="phone">
-                  9. Teléfono <RequiredMark />
+                  8. Teléfono <RequiredMark />
                 </Label>
-                <Input id="phone" name="phone" type="tel" required />
+                <Input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  inputMode="numeric"
+                  value={phone}
+                  onChange={(event) =>
+                    setPhone(formatPhoneNumber(event.target.value))
+                  }
+                  placeholder="Ej. 809-555-1234"
+                  pattern="(809|829|849)-\d{3}-\d{4}"
+                  title="El teléfono debe tener un código de área válido (809, 829 u 849) en el formato 809-555-1234"
+                  aria-invalid={isPhoneAreaCodeInvalid}
+                  required
+                />
+                {isPhoneAreaCodeInvalid && (
+                  <p className="text-xs text-destructive">
+                    El código de área debe ser 809, 829 u 849.
+                  </p>
+                )}
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>
-                  10. ¿Es dueño de la empresa? <RequiredMark />
+                <Label htmlFor="isOwner">
+                  9. ¿Es dueño de la empresa? <RequiredMark />
                 </Label>
-                <div className="flex gap-6">
-                  <label className="flex items-center gap-2 text-sm">
-                    <Radio name="isOwner" value="si" required /> Sí
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <Radio name="isOwner" value="no" /> No
-                  </label>
-                </div>
+                <Select id="isOwner" name="isOwner" defaultValue="" required>
+                  <option value="">
+                    Seleccioná una opción
+                  </option>
+                  <option value="si">Sí</option>
+                  <option value="no">No</option>
+                </Select>
               </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="idNumber">
-                11. Número de Cédula de Identidad y Electoral{" "}
+                10. Número de Cédula de Identidad y Electoral{" "}
                 <RequiredMark />
               </Label>
-              <Input id="idNumber" name="idNumber" required />
+              <Input
+                id="idNumber"
+                name="idNumber"
+                inputMode="numeric"
+                value={idNumber}
+                onChange={(event) =>
+                  setIdNumber(formatCedula(event.target.value))
+                }
+                placeholder="Ej. 001-1234567-8"
+                pattern="\d{3}-\d{7}-\d{1}"
+                title="El número de cédula debe tener el formato 000-0000000-0"
+                required
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="idPhotos">
-                12. Fotografías de ambos lados de la Cédula <RequiredMark />
+                11. Fotografías de ambos lados de la Cédula <RequiredMark />
               </Label>
               <Input
                 id="idPhotos"
@@ -247,22 +456,45 @@ export default function ServiceRequestPage() {
                 accept="image/*"
                 multiple
                 required
+                onChange={(event) => {
+                  if (event.target.files && event.target.files.length > 2) {
+                    setIdPhotosError("Solo podés subir un máximo de 2 fotos.")
+                    event.target.value = ""
+                  } else {
+                    setIdPhotosError("")
+                  }
+                }}
               />
-              <p className="text-xs text-muted-foreground">
-                Hasta 5 imágenes, máx. 100 MB por archivo.
-              </p>
+              {idPhotosError && (
+                <p className="text-xs text-destructive">{idPhotosError}</p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="email">
-                13. Correo Electrónico <RequiredMark />
+                12. Correo Electrónico <RequiredMark />
               </Label>
-              <Input id="email" name="email" type="email" required />
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                onBlur={() => setEmailTouched(true)}
+                placeholder="Ej. nombre@correo.com"
+                aria-invalid={isEmailInvalid}
+                required
+              />
+              {isEmailInvalid && (
+                <p className="text-xs text-destructive">
+                  Ingresá un correo electrónico válido.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="sector">
-                14. Sector económico al que pertenece la empresa{" "}
+                13. Sector económico al que pertenece la empresa{" "}
                 <RequiredMark />
               </Label>
               <Select
@@ -272,7 +504,7 @@ export default function ServiceRequestPage() {
                 onChange={(event) => setSector(event.target.value)}
                 required
               >
-                <option value="" disabled>
+                <option value="">
                   Seleccioná un sector
                 </option>
                 {sectorOptions.map((option) => (
@@ -292,7 +524,7 @@ export default function ServiceRequestPage() {
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="businessDescription">
-                15. Breve descripción del Negocio o Emprendimiento{" "}
+                14. Breve descripción del Negocio o Emprendimiento{" "}
                 <RequiredMark />
               </Label>
               <Textarea
@@ -305,14 +537,14 @@ export default function ServiceRequestPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="startDate">
-                  16. Fecha en que inició operaciones el negocio{" "}
+                  15. Fecha en que inició operaciones el negocio{" "}
                   <RequiredMark />
                 </Label>
                 <Input id="startDate" name="startDate" type="date" required />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="employeeCount">
-                  17. Número total de empleados <RequiredMark />
+                  16. Número total de empleados <RequiredMark />
                 </Label>
                 <Input
                   id="employeeCount"
@@ -325,31 +557,30 @@ export default function ServiceRequestPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="address">18. Dirección física de la empresa</Label>
+              <Label htmlFor="address">17. Dirección física de la empresa</Label>
               <Input id="address" name="address" />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label>
-                19. ¿Cuál o cuáles servicios le gustaría solicitar al Centro?{" "}
+                18. ¿Cuál o cuáles servicios le gustaría solicitar al Centro?{" "}
                 <RequiredMark />
               </Label>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {serviceOptions.map((option) => (
-                  <label
-                    key={option}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <Checkbox name="services" value={option} />
-                    {option}
-                  </label>
-                ))}
-              </div>
+              <MultiCombobox
+                name="services"
+                values={services}
+                onValuesChange={setServices}
+                options={serviceOptions}
+                placeholder="Seleccioná uno o más servicios"
+                searchPlaceholder="Buscar servicio..."
+                columns={2}
+                required
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="referral">
-                20. ¿Cómo te enteraste de nuestros servicios? <RequiredMark />
+                19. ¿Cómo te enteraste de nuestros servicios? <RequiredMark />
               </Label>
               <Select
                 id="referral"
@@ -358,7 +589,7 @@ export default function ServiceRequestPage() {
                 onChange={(event) => setReferral(event.target.value)}
                 required
               >
-                <option value="" disabled>
+                <option value="">
                   Seleccioná una opción
                 </option>
                 {referralOptions.map((option) => (
@@ -376,14 +607,21 @@ export default function ServiceRequestPage() {
               )}
             </div>
           </CardContent>
+          <CardFooter className="justify-end">
+            <Button type="button" onClick={() => setStep(2)}>
+              Siguiente
+            </Button>
+          </CardFooter>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Sección 2 — Acuerdo y Confidencialidad</CardTitle>
+        <Card ref={section2Ref} className={step !== 2 ? "hidden" : undefined}>
+          <CardHeader className="border-b pb-4">
+            <CardTitle className="text-lg font-semibold">
+              Sección 2 — Acuerdo y Confidencialidad
+            </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-5 pb-6">
-            <p className="text-sm text-muted-foreground">
+          <CardContent className="flex flex-col gap-5 pt-6 pb-6">
+            <p className="text-justify text-sm text-muted-foreground">
               Yo declaro bajo juramento que la información proporcionada es
               verídica. Yo estoy de acuerdo en participar si soy seleccionado
               para contestar la encuesta de evaluación de los servicios de
@@ -402,10 +640,10 @@ export default function ServiceRequestPage() {
             </p>
 
             <div className="flex flex-col gap-1.5">
-              <Label>
-                21. Confidencialidad <RequiredMark />
+              <Label htmlFor="confidentiality">
+                20. Confidencialidad <RequiredMark />
               </Label>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-justify text-sm text-muted-foreground">
                 El Centro de Prototipado y Transferencia Tecnológica
                 mantendrá estricta confidencialidad e imparcialidad durante
                 la ejecución de los trabajos aquí descritos, así como al
@@ -422,18 +660,41 @@ export default function ServiceRequestPage() {
                 Tecnológica quedará liberado de dicha confidencialidad y se
                 contactará al cliente para informarle.
               </p>
-              <div className="flex gap-6">
-                <label className="flex items-center gap-2 text-sm">
-                  <Radio name="confidentiality" value="si" required /> Sí
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <Radio name="confidentiality" value="no" /> No
-                </label>
+              <Select
+                id="confidentiality"
+                name="confidentiality"
+                defaultValue=""
+                required
+              >
+                <option value="">
+                  Seleccioná una opción
+                </option>
+                <option value="si">Sí</option>
+                <option value="no">No</option>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="signature">21. Firma</Label>
+              <div
+                id="signature"
+                className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed border-input bg-muted/30"
+              >
+                <Signature className="size-6 text-muted-foreground" />
               </div>
             </div>
+
+            {submitError && (
+              <p className="text-sm text-destructive">{submitError}</p>
+            )}
           </CardContent>
-          <CardFooter>
-            <Button type="submit">Enviar solicitud</Button>
+          <CardFooter className="justify-between">
+            <Button type="button" variant="outline" onClick={() => setStep(1)}>
+              Atrás
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Enviando..." : "Enviar solicitud"}
+            </Button>
           </CardFooter>
         </Card>
       </form>
