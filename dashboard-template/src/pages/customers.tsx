@@ -24,7 +24,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { Combobox } from "@/components/ui/combobox"
 import { MultiCombobox } from "@/components/ui/multi-combobox"
 import { Sheet } from "@/components/ui/sheet"
-import { SignatureCanvas } from "@/components/ui/signature-canvas"
 import { dominicanProvinces } from "@/data/provinces"
 import { municipalitiesByProvince } from "@/data/municipalities"
 import {
@@ -894,10 +893,23 @@ export default function CustomersPage() {
 
             <div className="flex flex-col gap-1.5">
               <Label>Firma</Label>
-              <SignatureCanvas
-                value={editValues.signature ?? ""}
-                onChange={(next) => updateEditValue("signature", next || null)}
-              />
+              {editValues.signature ? (
+                <div className="flex h-40 w-full items-center justify-center rounded-lg border bg-white p-2">
+                  <img
+                    src={editValues.signature}
+                    alt="Firma del cliente"
+                    className="h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-40 w-full items-center justify-center rounded-lg border border-dashed bg-muted/30 text-xs text-muted-foreground">
+                  Sin firma
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                La firma no se edita acá — usá "Enviar a firmar" para que el
+                cliente la registre desde su propio enlace.
+              </p>
             </div>
           </div>
         )}
