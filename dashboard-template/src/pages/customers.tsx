@@ -8,6 +8,7 @@ import {
   Phone,
   Search,
   Signature,
+  Trash2,
   Users,
 } from "lucide-react"
 
@@ -98,6 +99,9 @@ export default function CustomersPage() {
   const [editValues, setEditValues] = useState<EditableFields | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState("")
 
   useEffect(() => {
     let cancelled = false
@@ -108,6 +112,7 @@ export default function CustomersPage() {
         .select(
           "id, created_at, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, sector, sector_other, business_description, start_date, employee_count, address, services, referral, referral_other"
         )
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
 
       if (cancelled) return
@@ -151,6 +156,8 @@ export default function CustomersPage() {
     setSelected(request)
     setEditing(false)
     setSaveError("")
+    setConfirmingDelete(false)
+    setDeleteError("")
   }
 
   function closeSheet() {
@@ -158,6 +165,41 @@ export default function CustomersPage() {
     setEditing(false)
     setEditValues(null)
     setSaveError("")
+    setConfirmingDelete(false)
+    setDeleteError("")
+  }
+
+  async function handleDelete() {
+    if (!selected) return
+
+    setDeleting(true)
+    setDeleteError("")
+
+    const { error } = await supabase
+      .from("service_requests")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", selected.id)
+
+    if (!error) {
+      await supabase.from("service_request_changes").insert({
+        service_request_id: selected.id,
+        business_name: selected.business_name,
+        action: "eliminado",
+      })
+    }
+
+    setDeleting(false)
+
+    if (error) {
+      setDeleteError("No pudimos eliminar el cliente. Intentá de nuevo.")
+      return
+    }
+
+    const deletedId = selected.id
+    setRequests(
+      (current) => current?.filter((request) => request.id !== deletedId) ?? current
+    )
+    closeSheet()
   }
 
   function startEditing() {
@@ -177,6 +219,20 @@ export default function CustomersPage() {
   async function handleSave() {
     if (!selected || !editValues) return
 
+    const changedFields: Record<string, { from: unknown; to: unknown }> = {}
+    for (const key of Object.keys(editValues) as (keyof EditableFields)[]) {
+      const before = JSON.stringify(selected[key])
+      const after = JSON.stringify(editValues[key])
+      if (before !== after) {
+        changedFields[key] = { from: selected[key], to: editValues[key] }
+      }
+    }
+
+    if (Object.keys(changedFields).length === 0) {
+      setEditing(false)
+      return
+    }
+
     setSaving(true)
     setSaveError("")
 
@@ -184,6 +240,15 @@ export default function CustomersPage() {
       .from("service_requests")
       .update(editValues)
       .eq("id", selected.id)
+
+    if (!error) {
+      await supabase.from("service_request_changes").insert({
+        service_request_id: selected.id,
+        business_name: editValues.business_name,
+        action: "editado",
+        changed_fields: changedFields,
+      })
+    }
 
     setSaving(false)
 
@@ -207,9 +272,6 @@ export default function CustomersPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
-        <p className="text-sm text-muted-foreground">
-          Solicitudes de servicios recibidas a través del formulario.
-        </p>
       </div>
 
       {requests !== null && requests.length > 0 && (
@@ -343,11 +405,48 @@ export default function CustomersPage() {
                 {saving ? "Guardando..." : "Guardar cambios"}
               </Button>
             </div>
+          ) : confirmingDelete ? (
+            <div className="flex flex-col gap-2">
+              {deleteError && (
+                <p className="text-sm text-destructive">{deleteError}</p>
+              )}
+              <p className="text-sm text-muted-foreground">
+                ¿Eliminar este cliente? Esta acción no se puede deshacer.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={deleting}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                >
+                  {deleting ? "Eliminando..." : "Sí, eliminar"}
+                </Button>
+              </div>
+            </div>
           ) : (
-            <Button type="button" onClick={startEditing}>
-              <Pencil className="size-4" />
-              Editar
-            </Button>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => setConfirmingDelete(true)}
+              >
+                <Trash2 className="size-4" />
+                Eliminar
+              </Button>
+              <Button type="button" onClick={startEditing}>
+                <Pencil className="size-4" />
+                Editar
+              </Button>
+            </div>
           )
         }
       >

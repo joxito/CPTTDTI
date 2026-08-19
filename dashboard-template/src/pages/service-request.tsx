@@ -118,30 +118,42 @@ export default function ServiceRequestPage({
     setSubmitting(true)
     setSubmitError("")
 
-    const { error } = await supabase.from("service_requests").insert({
-      business_name: formData.get("businessName"),
-      has_rnc: formData.get("hasRnc"),
-      rnc_number: formData.get("rncNumber") || null,
-      province: formData.get("province"),
-      municipality: formData.get("municipality"),
-      representative_name: formData.get("representativeName"),
-      sex: formData.get("sex"),
-      age: Number(formData.get("age")),
-      phone: formData.get("phone"),
-      is_owner: formData.get("isOwner"),
-      id_number: formData.get("idNumber"),
-      email: formData.get("email"),
-      sector: formData.get("sector"),
-      sector_other: formData.get("sectorOther") || null,
-      business_description: formData.get("businessDescription"),
-      start_date: formData.get("startDate"),
-      employee_count: Number(formData.get("employeeCount")),
-      address: formData.get("address") || null,
-      services,
-      referral: formData.get("referral"),
-      referral_other: formData.get("referralOther") || null,
-      confidentiality: formData.get("confidentiality"),
-    })
+    const { data, error } = await supabase
+      .from("service_requests")
+      .insert({
+        business_name: formData.get("businessName"),
+        has_rnc: formData.get("hasRnc"),
+        rnc_number: formData.get("rncNumber") || null,
+        province: formData.get("province"),
+        municipality: formData.get("municipality"),
+        representative_name: formData.get("representativeName"),
+        sex: formData.get("sex"),
+        age: Number(formData.get("age")),
+        phone: formData.get("phone"),
+        is_owner: formData.get("isOwner"),
+        id_number: formData.get("idNumber"),
+        email: formData.get("email"),
+        sector: formData.get("sector"),
+        sector_other: formData.get("sectorOther") || null,
+        business_description: formData.get("businessDescription"),
+        start_date: formData.get("startDate"),
+        employee_count: Number(formData.get("employeeCount")),
+        address: formData.get("address") || null,
+        services,
+        referral: formData.get("referral"),
+        referral_other: formData.get("referralOther") || null,
+        confidentiality: formData.get("confidentiality"),
+      })
+      .select("id, business_name")
+      .single()
+
+    if (!error && data) {
+      await supabase.from("service_request_changes").insert({
+        service_request_id: data.id,
+        business_name: data.business_name,
+        action: "creado",
+      })
+    }
 
     setSubmitting(false)
 

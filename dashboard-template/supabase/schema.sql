@@ -28,7 +28,12 @@ create table if not exists service_requests (
   referral_other text,
 
   -- Sección 2 — Acuerdo y Confidencialidad
-  confidentiality text not null check (confidentiality in ('si', 'no'))
+  confidentiality text not null check (confidentiality in ('si', 'no')),
+
+  -- Borrado suave: al "eliminar" un cliente desde el panel se marca esta
+  -- columna en vez de borrar la fila, para poder revertirlo desde el
+  -- historial. La lista de Clientes filtra las filas con deleted_at is not null.
+  deleted_at timestamptz
 );
 
 alter table service_requests enable row level security;
@@ -54,4 +59,33 @@ create policy "Cualquiera puede editar las solicitudes"
   on service_requests for update
   to anon, authenticated
   using (true)
+  with check (true);
+
+-- No hay política de DELETE: "eliminar" un cliente desde el panel en
+-- realidad hace un UPDATE que marca deleted_at (ver arriba), para poder
+-- revertirlo desde el historial.
+
+create table if not exists service_request_changes (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  service_request_id uuid not null references service_requests (id),
+  business_name text not null,
+  action text not null check (action in ('creado', 'editado', 'eliminado', 'restaurado')),
+  -- Sin login todavía en el dashboard, no hay forma de saber qué persona
+  -- del staff hizo cada cambio: queda fijo en 'Usuario' hasta que se
+  -- agregue autenticación.
+  actor text not null default 'Usuario',
+  changed_fields jsonb
+);
+
+alter table service_request_changes enable row level security;
+
+create policy "Cualquiera puede ver el historial"
+  on service_request_changes for select
+  to anon, authenticated
+  using (true);
+
+create policy "Cualquiera puede registrar cambios en el historial"
+  on service_request_changes for insert
+  to anon, authenticated
   with check (true);

@@ -4,6 +4,7 @@ import {
   Users,
   Settings,
   ClipboardList,
+  History,
   LogOut,
   X,
 } from "lucide-react"
@@ -20,6 +21,7 @@ const navItems = [
     label: "Solicitud de Servicios",
     icon: ClipboardList,
   },
+  { to: "/historial", label: "Historial", icon: History },
   { to: "/settings", label: "Configuración", icon: Settings },
 ]
 
