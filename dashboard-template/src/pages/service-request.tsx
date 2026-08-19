@@ -60,6 +60,7 @@ export default function ServiceRequestPage({
   const [idNumber, setIdNumber] = useState("")
   const [idPhotos, setIdPhotos] = useState<File[]>([])
   const [idPhotosError, setIdPhotosError] = useState("")
+  const [hasCamera, setHasCamera] = useState(false)
   const [email, setEmail] = useState("")
   const [emailTouched, setEmailTouched] = useState(false)
   const [services, setServices] = useState<string[]>([])
@@ -80,6 +81,16 @@ export default function ServiceRequestPage({
     idPhotos.forEach((file) => dataTransfer.items.add(file))
     input.files = dataTransfer.files
   }, [idPhotos])
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) return
+    navigator.mediaDevices
+      .enumerateDevices()
+      .then((devices) =>
+        setHasCamera(devices.some((device) => device.kind === "videoinput"))
+      )
+      .catch(() => setHasCamera(false))
+  }, [])
 
   function addIdPhotos(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return
@@ -457,14 +468,16 @@ export default function ServiceRequestPage({
                   <Upload className="size-4" />
                   Subir documento
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => cameraInputRef.current?.click()}
-                >
-                  <Camera className="size-4" />
-                  Usar cámara
-                </Button>
+                {hasCamera && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => cameraInputRef.current?.click()}
+                  >
+                    <Camera className="size-4" />
+                    Usar cámara
+                  </Button>
+                )}
               </div>
 
               <input
@@ -472,7 +485,7 @@ export default function ServiceRequestPage({
                 type="file"
                 accept="image/*"
                 multiple
-                className="hidden"
+                className="sr-only"
                 onChange={(event) => {
                   addIdPhotos(event.target.files)
                   event.target.value = ""
@@ -483,7 +496,7 @@ export default function ServiceRequestPage({
                 type="file"
                 accept="image/*"
                 capture="environment"
-                className="hidden"
+                className="sr-only"
                 onChange={(event) => {
                   addIdPhotos(event.target.files)
                   event.target.value = ""
