@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Combobox } from "@/components/ui/combobox"
 import { MultiCombobox } from "@/components/ui/multi-combobox"
+import { CameraCapture } from "@/components/ui/camera-capture"
 import { Textarea } from "@/components/ui/textarea"
 import { dominicanProvinces } from "@/data/provinces"
 import { municipalitiesByProvince } from "@/data/municipalities"
@@ -61,6 +62,7 @@ export default function ServiceRequestPage({
   const [idPhotos, setIdPhotos] = useState<File[]>([])
   const [idPhotosError, setIdPhotosError] = useState("")
   const [hasCamera, setHasCamera] = useState(false)
+  const [cameraOpen, setCameraOpen] = useState(false)
   const [email, setEmail] = useState("")
   const [emailTouched, setEmailTouched] = useState(false)
   const [services, setServices] = useState<string[]>([])
@@ -90,10 +92,10 @@ export default function ServiceRequestPage({
       .catch(() => setHasCamera(false))
   }, [])
 
-  function addIdPhotos(fileList: FileList | null) {
-    if (!fileList || fileList.length === 0) return
+  function addIdPhotos(files: File[]) {
+    if (files.length === 0) return
 
-    const combined = [...idPhotos, ...Array.from(fileList)]
+    const combined = [...idPhotos, ...files]
 
     if (combined.length > 2) {
       setIdPhotosError("Solo podés subir un máximo de 2 fotos.")
@@ -466,13 +468,14 @@ export default function ServiceRequestPage({
                   Subir documento
                 </label>
                 {hasCamera && (
-                  <label
-                    htmlFor="idPhotosCamera"
-                    className={buttonVariants({ variant: "outline" })}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setCameraOpen(true)}
                   >
                     <Camera className="size-4" />
                     Usar cámara
-                  </label>
+                  </Button>
                 )}
               </div>
 
@@ -483,19 +486,17 @@ export default function ServiceRequestPage({
                 multiple
                 className="sr-only"
                 onChange={(event) => {
-                  addIdPhotos(event.target.files)
+                  addIdPhotos(Array.from(event.target.files ?? []))
                   event.target.value = ""
                 }}
               />
-              <input
-                id="idPhotosCamera"
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="sr-only"
-                onChange={(event) => {
-                  addIdPhotos(event.target.files)
-                  event.target.value = ""
+
+              <CameraCapture
+                open={cameraOpen}
+                onClose={() => setCameraOpen(false)}
+                onCapture={(file) => {
+                  addIdPhotos([file])
+                  setCameraOpen(false)
                 }}
               />
               {/* Control real (oculto) que participa de la validación del formulario. */}
