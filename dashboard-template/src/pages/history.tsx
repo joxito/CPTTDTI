@@ -190,7 +190,10 @@ export default function HistoryPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <Badge variant={badge.variant}>
+                      <Badge
+                        variant={badge.variant}
+                        className="w-28 justify-center"
+                      >
                         <badge.icon className="size-3" />
                         {badge.label}
                       </Badge>
