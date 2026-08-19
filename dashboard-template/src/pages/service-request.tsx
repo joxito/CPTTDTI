@@ -750,6 +750,12 @@ export default function ServiceRequestPage({
               </div>
             </div>
 
+            <img
+              src="/logos-institucionales.png"
+              alt="Gobierno de la República Dominicana - MICM, OEA, Instituto Politécnico Loyola"
+              className="mx-auto w-full max-w-md"
+            />
+
             {submitError && (
               <p className="text-sm text-destructive">{submitError}</p>
             )}
