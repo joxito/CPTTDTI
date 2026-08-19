@@ -123,13 +123,8 @@ export default function ServiceRequestPage({
 
     return (
       <div className="min-h-screen bg-muted/30 px-4 py-8 md:px-6">
-        <div className="mx-auto mb-6 flex max-w-3xl items-center gap-2 font-semibold">
-          <img
-            src="/cptt-logo.png"
-            alt="CPTTL"
-            className="h-9 w-auto rounded-sm"
-          />
-          <span>CPTTL</span>
+        <div className="mx-auto mb-6 flex max-w-3xl items-center">
+          <img src="/cptt-logo.png" alt="CPTTL" className="h-20 w-auto" />
         </div>
         {content}
       </div>
