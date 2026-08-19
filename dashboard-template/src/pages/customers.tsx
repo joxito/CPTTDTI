@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react"
 import {
   Building2,
   Calendar,
+  Check,
+  Link as LinkIcon,
   Mail,
   MapPin,
   Pencil,
@@ -104,6 +106,15 @@ export default function CustomersPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
+  const [signLinkCopied, setSignLinkCopied] = useState(false)
+
+  async function handleCopySignLink() {
+    if (!selected) return
+    const signUrl = `${window.location.origin}/firmar/${selected.id}`
+    await navigator.clipboard.writeText(signUrl)
+    setSignLinkCopied(true)
+    setTimeout(() => setSignLinkCopied(false), 2000)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -448,7 +459,26 @@ export default function CustomersPage() {
               </div>
             </div>
           ) : (
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              {selected && !selected.signature && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCopySignLink}
+                >
+                  {signLinkCopied ? (
+                    <>
+                      <Check className="size-4" />
+                      Enlace copiado
+                    </>
+                  ) : (
+                    <>
+                      <LinkIcon className="size-4" />
+                      Enviar a firmar
+                    </>
+                  )}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="destructive"
