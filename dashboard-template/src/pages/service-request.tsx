@@ -127,7 +127,7 @@ export default function ServiceRequestPage({
           <img
             src="/cptt-logo.png"
             alt="CPTTL"
-            className="h-auto w-[min(90vw,745px)]"
+            className="h-auto w-[min(90vw,373px)]"
           />
         </div>
         {content}
