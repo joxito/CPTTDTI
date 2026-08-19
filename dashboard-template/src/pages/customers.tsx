@@ -5,6 +5,7 @@ import {
   Mail,
   MapPin,
   Pencil,
+  PenOff,
   Phone,
   Search,
   Trash2,
@@ -369,6 +370,12 @@ export default function CustomersPage() {
                 </div>
 
                 <div className="mt-2 flex flex-wrap gap-1.5">
+                  {!request.signature && (
+                    <Badge variant="destructive">
+                      <PenOff className="size-3" />
+                      Sin firmar
+                    </Badge>
+                  )}
                   <Badge variant="secondary">
                     {request.sector === "Otro"
                       ? request.sector_other
