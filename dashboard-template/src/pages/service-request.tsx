@@ -17,7 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
@@ -71,8 +71,6 @@ export default function ServiceRequestPage({
   const section1Ref = useRef<HTMLDivElement>(null)
   const section2Ref = useRef<HTMLDivElement>(null)
   const idPhotosInputRef = useRef<HTMLInputElement>(null)
-  const uploadInputRef = useRef<HTMLInputElement>(null)
-  const cameraInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const input = idPhotosInputRef.current
@@ -460,28 +458,26 @@ export default function ServiceRequestPage({
               </Label>
 
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => uploadInputRef.current?.click()}
+                <label
+                  htmlFor="idPhotosUpload"
+                  className={buttonVariants({ variant: "outline" })}
                 >
                   <Upload className="size-4" />
                   Subir documento
-                </Button>
+                </label>
                 {hasCamera && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => cameraInputRef.current?.click()}
+                  <label
+                    htmlFor="idPhotosCamera"
+                    className={buttonVariants({ variant: "outline" })}
                   >
                     <Camera className="size-4" />
                     Usar cámara
-                  </Button>
+                  </label>
                 )}
               </div>
 
               <input
-                ref={uploadInputRef}
+                id="idPhotosUpload"
                 type="file"
                 accept="image/*"
                 multiple
@@ -492,7 +488,7 @@ export default function ServiceRequestPage({
                 }}
               />
               <input
-                ref={cameraInputRef}
+                id="idPhotosCamera"
                 type="file"
                 accept="image/*"
                 capture="environment"
