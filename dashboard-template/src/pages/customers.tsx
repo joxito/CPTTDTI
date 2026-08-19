@@ -7,7 +7,6 @@ import {
   Pencil,
   Phone,
   Search,
-  Signature,
   Trash2,
   Users,
 } from "lucide-react"
@@ -22,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Combobox } from "@/components/ui/combobox"
 import { MultiCombobox } from "@/components/ui/multi-combobox"
 import { Sheet } from "@/components/ui/sheet"
+import { SignatureCanvas } from "@/components/ui/signature-canvas"
 import { dominicanProvinces } from "@/data/provinces"
 import { municipalitiesByProvince } from "@/data/municipalities"
 import {
@@ -56,6 +56,7 @@ type ServiceRequest = {
   services: string[]
   referral: string
   referral_other: string | null
+  signature: string | null
 }
 
 type EditableFields = Omit<ServiceRequest, "id" | "created_at">
@@ -110,7 +111,7 @@ export default function CustomersPage() {
       const { data, error } = await supabase
         .from("service_requests")
         .select(
-          "id, created_at, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, sector, sector_other, business_description, start_date, employee_count, address, services, referral, referral_other"
+          "id, created_at, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, sector, sector_other, business_description, start_date, employee_count, address, services, referral, referral_other, signature"
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -223,7 +224,14 @@ export default function CustomersPage() {
     for (const key of Object.keys(editValues) as (keyof EditableFields)[]) {
       const before = JSON.stringify(selected[key])
       const after = JSON.stringify(editValues[key])
-      if (before !== after) {
+      if (before === after) continue
+
+      if (key === "signature") {
+        changedFields[key] = {
+          from: selected.signature ? "(firma anterior)" : "(sin firma)",
+          to: editValues.signature ? "(firma nueva)" : "(sin firma)",
+        }
+      } else {
         changedFields[key] = { from: selected[key], to: editValues[key] }
       }
     }
@@ -541,9 +549,19 @@ export default function CustomersPage() {
               <span className="text-xs font-medium text-muted-foreground">
                 Firma
               </span>
-              <div className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed bg-muted/30">
-                <Signature className="size-6 text-muted-foreground" />
-              </div>
+              {selected.signature ? (
+                <div className="flex h-24 w-full items-center justify-center rounded-lg border bg-white p-2">
+                  <img
+                    src={selected.signature}
+                    alt="Firma del cliente"
+                    className="h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed bg-muted/30 text-xs text-muted-foreground">
+                  Sin firma
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -839,9 +857,10 @@ export default function CustomersPage() {
 
             <div className="flex flex-col gap-1.5">
               <Label>Firma</Label>
-              <div className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed bg-muted/30">
-                <Signature className="size-6 text-muted-foreground" />
-              </div>
+              <SignatureCanvas
+                value={editValues.signature ?? ""}
+                onChange={(next) => updateEditValue("signature", next || null)}
+              />
             </div>
           </div>
         )}
