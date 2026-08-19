@@ -1,15 +1,17 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   FilePlus2,
   History as HistoryIcon,
   Pencil,
   RotateCcw,
+  Search,
   Trash2,
 } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { serviceRequestFieldLabels } from "@/data/service-request-field-labels"
 import { supabase } from "@/lib/supabase"
@@ -57,6 +59,7 @@ export default function HistoryPage() {
   const [changes, setChanges] = useState<Change[] | null>(null)
   const [error, setError] = useState("")
   const [restoringId, setRestoringId] = useState<string | null>(null)
+  const [query, setQuery] = useState("")
 
   async function loadChanges() {
     const { data, error } = await supabase
@@ -96,6 +99,19 @@ export default function HistoryPage() {
     setRestoringId(null)
   }
 
+  const filteredChanges = useMemo(() => {
+    if (!changes) return changes
+    const normalizedQuery = query.trim().toLocaleLowerCase("es")
+    if (!normalizedQuery) return changes
+
+    return changes.filter((change) =>
+      [change.business_name, change.actor, actionBadge[change.action].label]
+        .join(" ")
+        .toLocaleLowerCase("es")
+        .includes(normalizedQuery)
+    )
+  }, [changes, query])
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -104,6 +120,19 @@ export default function HistoryPage() {
           Todos los cambios hechos sobre los clientes.
         </p>
       </div>
+
+      {changes !== null && changes.length > 0 && (
+        <div className="relative max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar por negocio, usuario o tipo de cambio..."
+            className="pl-8"
+          />
+        </div>
+      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -120,9 +149,20 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {changes !== null && changes.length > 0 && (
+      {changes !== null &&
+        changes.length > 0 &&
+        filteredChanges?.length === 0 && (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-16 text-center">
+            <Search className="size-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              No encontramos cambios que coincidan con "{query}".
+            </p>
+          </div>
+        )}
+
+      {filteredChanges !== null && filteredChanges.length > 0 && (
         <div className="flex flex-col gap-3">
-          {changes.map((change) => {
+          {filteredChanges.map((change) => {
             const badge = actionBadge[change.action]
             const isStillDeleted =
               change.service_requests?.deleted_at !== null &&
