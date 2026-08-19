@@ -107,7 +107,7 @@ export function SignatureCanvas({
         ref={canvasRef}
         width={500}
         height={200}
-        className="h-24 w-full cursor-crosshair touch-none"
+        className="h-40 w-full cursor-crosshair touch-none"
         style={{ touchAction: "none" }}
         onMouseDown={startDrawing}
         onMouseMove={draw}

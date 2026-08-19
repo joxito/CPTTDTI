@@ -88,7 +88,7 @@ export default function SignRequestPage() {
 
   return (
     <div className="min-h-screen bg-muted/30 px-4 py-8 md:px-6">
-      <div className="mx-auto mb-8 flex max-w-xl items-center justify-center">
+      <div className="mx-auto mb-8 flex max-w-md items-center justify-center">
         <img
           src="/cptt-logo.png"
           alt="CPTTL"
@@ -96,7 +96,7 @@ export default function SignRequestPage() {
         />
       </div>
 
-      <div className="mx-auto max-w-xl">
+      <div className="mx-auto max-w-md">
         <Card>
           <CardContent className="flex flex-col gap-4 py-8">
             {loading && (
@@ -128,7 +128,7 @@ export default function SignRequestPage() {
                 <img
                   src={justSigned ? signature : request.signature ?? ""}
                   alt="Firma"
-                  className="mt-2 h-24 rounded-lg border bg-white p-2"
+                  className="mt-2 h-40 rounded-lg border bg-white p-2"
                 />
               </div>
             )}

@@ -587,7 +587,7 @@ export default function CustomersPage() {
                 Firma
               </span>
               {selected.signature ? (
-                <div className="flex h-24 w-full items-center justify-center rounded-lg border bg-white p-2">
+                <div className="flex h-40 w-full items-center justify-center rounded-lg border bg-white p-2">
                   <img
                     src={selected.signature}
                     alt="Firma del cliente"
@@ -595,7 +595,7 @@ export default function CustomersPage() {
                   />
                 </div>
               ) : (
-                <div className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed bg-muted/30 text-xs text-muted-foreground">
+                <div className="flex h-40 w-full items-center justify-center rounded-lg border border-dashed bg-muted/30 text-xs text-muted-foreground">
                   Sin firma
                 </div>
               )}
