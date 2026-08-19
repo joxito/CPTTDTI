@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react"
 import {
   Building2,
   Calendar,
+  Check,
+  Link as LinkIcon,
   Mail,
   MapPin,
   Pencil,
+  PenOff,
   Phone,
   Search,
-  Signature,
   Trash2,
   Users,
 } from "lucide-react"
@@ -56,6 +58,7 @@ type ServiceRequest = {
   services: string[]
   referral: string
   referral_other: string | null
+  signature: string | null
 }
 
 type EditableFields = Omit<ServiceRequest, "id" | "created_at">
@@ -102,6 +105,15 @@ export default function CustomersPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
+  const [signLinkCopied, setSignLinkCopied] = useState(false)
+
+  async function handleCopySignLink() {
+    if (!selected) return
+    const signUrl = `${window.location.origin}/firmar/${selected.id}`
+    await navigator.clipboard.writeText(signUrl)
+    setSignLinkCopied(true)
+    setTimeout(() => setSignLinkCopied(false), 2000)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -110,7 +122,7 @@ export default function CustomersPage() {
       const { data, error } = await supabase
         .from("service_requests")
         .select(
-          "id, created_at, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, sector, sector_other, business_description, start_date, employee_count, address, services, referral, referral_other"
+          "id, created_at, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, sector, sector_other, business_description, start_date, employee_count, address, services, referral, referral_other, signature"
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -223,7 +235,14 @@ export default function CustomersPage() {
     for (const key of Object.keys(editValues) as (keyof EditableFields)[]) {
       const before = JSON.stringify(selected[key])
       const after = JSON.stringify(editValues[key])
-      if (before !== after) {
+      if (before === after) continue
+
+      if (key === "signature") {
+        changedFields[key] = {
+          from: selected.signature ? "(firma anterior)" : "(sin firma)",
+          to: editValues.signature ? "(firma nueva)" : "(sin firma)",
+        }
+      } else {
         changedFields[key] = { from: selected[key], to: editValues[key] }
       }
     }
@@ -361,6 +380,12 @@ export default function CustomersPage() {
                 </div>
 
                 <div className="mt-2 flex flex-wrap gap-1.5">
+                  {!request.signature && (
+                    <Badge variant="destructive">
+                      <PenOff className="size-3" />
+                      Sin firmar
+                    </Badge>
+                  )}
                   <Badge variant="secondary">
                     {request.sector === "Otro"
                       ? request.sector_other
@@ -433,7 +458,26 @@ export default function CustomersPage() {
               </div>
             </div>
           ) : (
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              {selected && !selected.signature && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCopySignLink}
+                >
+                  {signLinkCopied ? (
+                    <>
+                      <Check className="size-4" />
+                      Enlace copiado
+                    </>
+                  ) : (
+                    <>
+                      <LinkIcon className="size-4" />
+                      Enviar a firmar
+                    </>
+                  )}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="destructive"
@@ -541,9 +585,19 @@ export default function CustomersPage() {
               <span className="text-xs font-medium text-muted-foreground">
                 Firma
               </span>
-              <div className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed bg-muted/30">
-                <Signature className="size-6 text-muted-foreground" />
-              </div>
+              {selected.signature ? (
+                <div className="flex h-40 w-full items-center justify-center rounded-lg border bg-white p-2">
+                  <img
+                    src={selected.signature}
+                    alt="Firma del cliente"
+                    className="h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-40 w-full items-center justify-center rounded-lg border border-dashed bg-muted/30 text-xs text-muted-foreground">
+                  Sin firma
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -839,9 +893,19 @@ export default function CustomersPage() {
 
             <div className="flex flex-col gap-1.5">
               <Label>Firma</Label>
-              <div className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed bg-muted/30">
-                <Signature className="size-6 text-muted-foreground" />
-              </div>
+              {editValues.signature ? (
+                <div className="flex h-40 w-full items-center justify-center rounded-lg border bg-white p-2">
+                  <img
+                    src={editValues.signature}
+                    alt="Firma del cliente"
+                    className="h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-40 w-full items-center justify-center rounded-lg border border-dashed bg-muted/30 text-xs text-muted-foreground">
+                  Sin firma
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -4,7 +4,6 @@ import {
   Check,
   CheckCircle2,
   Link as LinkIcon,
-  Signature,
   Upload,
   X,
 } from "lucide-react"
@@ -24,6 +23,7 @@ import { Select } from "@/components/ui/select"
 import { Combobox } from "@/components/ui/combobox"
 import { MultiCombobox } from "@/components/ui/multi-combobox"
 import { CameraCapture } from "@/components/ui/camera-capture"
+import { SignatureCanvas } from "@/components/ui/signature-canvas"
 import { Textarea } from "@/components/ui/textarea"
 import { dominicanProvinces } from "@/data/provinces"
 import { municipalitiesByProvince } from "@/data/municipalities"
@@ -63,6 +63,7 @@ export default function ServiceRequestPage({
   const [idPhotosError, setIdPhotosError] = useState("")
   const [hasCamera, setHasCamera] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
+  const [signature, setSignature] = useState("")
   const [email, setEmail] = useState("")
   const [emailTouched, setEmailTouched] = useState(false)
   const [services, setServices] = useState<string[]>([])
@@ -192,6 +193,7 @@ export default function ServiceRequestPage({
         referral: formData.get("referral"),
         referral_other: formData.get("referralOther") || null,
         confidentiality: formData.get("confidentiality"),
+        signature: signature || null,
       })
       .select("id, business_name")
       .single()
@@ -743,12 +745,7 @@ export default function ServiceRequestPage({
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="signature">21. Firma</Label>
-              <div
-                id="signature"
-                className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed border-input bg-muted/30"
-              >
-                <Signature className="size-6 text-muted-foreground" />
-              </div>
+              <SignatureCanvas value={signature} onChange={setSignature} />
             </div>
 
             <img

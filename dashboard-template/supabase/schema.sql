@@ -29,6 +29,8 @@ create table if not exists service_requests (
 
   -- Sección 2 — Acuerdo y Confidencialidad
   confidentiality text not null check (confidentiality in ('si', 'no')),
+  -- Firma dibujada, como imagen (data URL base64 de un PNG). Opcional.
+  signature text,
 
   -- Borrado suave: al "eliminar" un cliente desde el panel se marca esta
   -- columna en vez de borrar la fila, para poder revertirlo desde el

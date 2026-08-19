@@ -6,6 +6,7 @@ import CustomersPage from "@/pages/customers"
 import HistoryPage from "@/pages/history"
 import SettingsPage from "@/pages/settings"
 import ServiceRequestPage from "@/pages/service-request"
+import SignRequestPage from "@/pages/sign-request"
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         path="/solicitud-servicios/publico"
         element={<ServiceRequestPage standalone />}
       />
+      <Route path="/firmar/:id" element={<SignRequestPage />} />
     </Routes>
   )
 }
