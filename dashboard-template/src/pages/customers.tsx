@@ -906,10 +906,6 @@ export default function CustomersPage() {
                   Sin firma
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">
-                La firma no se edita acá — usá "Enviar a firmar" para que el
-                cliente la registre desde su propio enlace.
-              </p>
             </div>
           </div>
         )}
