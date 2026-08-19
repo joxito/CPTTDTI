@@ -1,5 +1,13 @@
-import { useRef, useState } from "react"
-import { Check, CheckCircle2, Link as LinkIcon, Signature } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import {
+  Camera,
+  Check,
+  CheckCircle2,
+  Link as LinkIcon,
+  Signature,
+  Upload,
+  X,
+} from "lucide-react"
 
 import {
   Card,
@@ -50,6 +58,7 @@ export default function ServiceRequestPage({
   const [municipality, setMunicipality] = useState("")
   const [phone, setPhone] = useState("")
   const [idNumber, setIdNumber] = useState("")
+  const [idPhotos, setIdPhotos] = useState<File[]>([])
   const [idPhotosError, setIdPhotosError] = useState("")
   const [email, setEmail] = useState("")
   const [emailTouched, setEmailTouched] = useState(false)
@@ -60,6 +69,36 @@ export default function ServiceRequestPage({
   const [submitError, setSubmitError] = useState("")
   const section1Ref = useRef<HTMLDivElement>(null)
   const section2Ref = useRef<HTMLDivElement>(null)
+  const idPhotosInputRef = useRef<HTMLInputElement>(null)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const input = idPhotosInputRef.current
+    if (!input) return
+    const dataTransfer = new DataTransfer()
+    idPhotos.forEach((file) => dataTransfer.items.add(file))
+    input.files = dataTransfer.files
+  }, [idPhotos])
+
+  function addIdPhotos(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return
+
+    const combined = [...idPhotos, ...Array.from(fileList)]
+
+    if (combined.length > 2) {
+      setIdPhotosError("Solo podés subir un máximo de 2 fotos.")
+      setIdPhotos(combined.slice(0, 2))
+    } else {
+      setIdPhotosError("")
+      setIdPhotos(combined)
+    }
+  }
+
+  function removeIdPhoto(index: number) {
+    setIdPhotosError("")
+    setIdPhotos((current) => current.filter((_, i) => i !== index))
+  }
 
   async function handleCopyLink() {
     const publicUrl = `${window.location.origin}/solicitud-servicios/publico`
@@ -408,22 +447,81 @@ export default function ServiceRequestPage({
               <Label htmlFor="idPhotos">
                 11. Fotografías de ambos lados de la Cédula <RequiredMark />
               </Label>
-              <Input
-                id="idPhotos"
-                name="idPhotos"
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => uploadInputRef.current?.click()}
+                >
+                  <Upload className="size-4" />
+                  Subir documento
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => cameraInputRef.current?.click()}
+                >
+                  <Camera className="size-4" />
+                  Usar cámara
+                </Button>
+              </div>
+
+              <input
+                ref={uploadInputRef}
                 type="file"
                 accept="image/*"
                 multiple
-                required
+                className="hidden"
                 onChange={(event) => {
-                  if (event.target.files && event.target.files.length > 2) {
-                    setIdPhotosError("Solo podés subir un máximo de 2 fotos.")
-                    event.target.value = ""
-                  } else {
-                    setIdPhotosError("")
-                  }
+                  addIdPhotos(event.target.files)
+                  event.target.value = ""
                 }}
               />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(event) => {
+                  addIdPhotos(event.target.files)
+                  event.target.value = ""
+                }}
+              />
+              {/* Control real (oculto) que participa de la validación del formulario. */}
+              <input
+                ref={idPhotosInputRef}
+                id="idPhotos"
+                name="idPhotos"
+                type="file"
+                required
+                tabIndex={-1}
+                onChange={() => {}}
+                className="sr-only"
+              />
+
+              {idPhotos.length > 0 && (
+                <ul className="flex flex-col gap-1.5">
+                  {idPhotos.map((file, index) => (
+                    <li
+                      key={`${file.name}-${index}`}
+                      className="flex items-center justify-between gap-2 rounded-md border px-3 py-1.5 text-sm"
+                    >
+                      <span className="truncate">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeIdPhoto(index)}
+                        aria-label={`Quitar ${file.name}`}
+                        className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
               {idPhotosError && (
                 <p className="text-xs text-destructive">{idPhotosError}</p>
               )}
