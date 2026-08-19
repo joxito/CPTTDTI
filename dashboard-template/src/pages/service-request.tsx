@@ -201,6 +201,7 @@ export default function ServiceRequestPage({
         service_request_id: data.id,
         business_name: data.business_name,
         action: "creado",
+        actor: standalone ? "Cliente" : "Usuario",
       })
     }
 
