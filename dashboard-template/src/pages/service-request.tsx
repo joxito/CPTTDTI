@@ -168,40 +168,107 @@ export default function ServiceRequestPage({
     setSubmitting(true)
     setSubmitError("")
 
+    const rncNumber = (formData.get("rncNumber") as string) || ""
+    const idNumber = formData.get("idNumber") as string
+    const clientFields = {
+      business_name: formData.get("businessName"),
+      has_rnc: formData.get("hasRnc"),
+      rnc_number: rncNumber || null,
+      province: formData.get("province"),
+      municipality: formData.get("municipality"),
+      representative_name: formData.get("representativeName"),
+      sex: formData.get("sex"),
+      age: Number(formData.get("age")),
+      phone: formData.get("phone"),
+      is_owner: formData.get("isOwner"),
+      id_number: idNumber,
+      email: formData.get("email"),
+      address: formData.get("address") || null,
+    }
+
+    // El RNC identifica al negocio; la cédula identifica a la persona y
+    // sirve de respaldo cuando no hay RNC. Así no se duplica un cliente
+    // que ya envió una solicitud antes.
+    const existingClientQuery = rncNumber
+      ? supabase
+          .from("clients")
+          .select("id")
+          .eq("rnc_number", rncNumber)
+          .is("deleted_at", null)
+          .maybeSingle()
+      : supabase
+          .from("clients")
+          .select("id")
+          .eq("id_number", idNumber)
+          .is("deleted_at", null)
+          .maybeSingle()
+
+    const { data: existingClient, error: lookupError } =
+      await existingClientQuery
+
+    if (lookupError) {
+      setSubmitting(false)
+      setSubmitError(
+        "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
+      )
+      return
+    }
+
+    let clientId = existingClient?.id as string | undefined
+
+    if (clientId) {
+      const { error: updateClientError } = await supabase
+        .from("clients")
+        .update(clientFields)
+        .eq("id", clientId)
+
+      if (updateClientError) {
+        setSubmitting(false)
+        setSubmitError(
+          "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
+        )
+        return
+      }
+    } else {
+      const { data: newClient, error: createClientError } = await supabase
+        .from("clients")
+        .insert(clientFields)
+        .select("id")
+        .single()
+
+      if (createClientError || !newClient) {
+        setSubmitting(false)
+        setSubmitError(
+          "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
+        )
+        return
+      }
+
+      clientId = newClient.id
+    }
+
     const { data, error } = await supabase
       .from("service_requests")
       .insert({
-        business_name: formData.get("businessName"),
-        has_rnc: formData.get("hasRnc"),
-        rnc_number: formData.get("rncNumber") || null,
-        province: formData.get("province"),
-        municipality: formData.get("municipality"),
-        representative_name: formData.get("representativeName"),
-        sex: formData.get("sex"),
-        age: Number(formData.get("age")),
-        phone: formData.get("phone"),
-        is_owner: formData.get("isOwner"),
-        id_number: formData.get("idNumber"),
-        email: formData.get("email"),
+        client_id: clientId,
         sector: formData.get("sector"),
         sector_other: formData.get("sectorOther") || null,
         business_description: formData.get("businessDescription"),
         start_date: formData.get("startDate"),
         employee_count: Number(formData.get("employeeCount")),
-        address: formData.get("address") || null,
         services,
         referral: formData.get("referral"),
         referral_other: formData.get("referralOther") || null,
         confidentiality: formData.get("confidentiality"),
         signature: signature || null,
       })
-      .select("id, business_name")
+      .select("id")
       .single()
 
     if (!error && data) {
       await supabase.from("service_request_changes").insert({
         service_request_id: data.id,
-        business_name: data.business_name,
+        business_name: clientFields.business_name,
         action: "creado",
         actor: standalone ? "Cliente" : "Usuario",
       })

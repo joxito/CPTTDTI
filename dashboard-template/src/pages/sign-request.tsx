@@ -14,9 +14,11 @@ import { supabase } from "@/lib/supabase"
 
 type RequestSummary = {
   id: string
-  business_name: string
-  representative_name: string
   signature: string | null
+  clients: {
+    business_name: string
+    representative_name: string
+  }
 }
 
 export default function SignRequestPage() {
@@ -34,7 +36,7 @@ export default function SignRequestPage() {
       if (!id) return
       const { data, error } = await supabase
         .from("service_requests")
-        .select("id, business_name, representative_name, signature")
+        .select("id, signature, clients(business_name, representative_name)")
         .eq("id", id)
         .is("deleted_at", null)
         .single()
@@ -45,7 +47,7 @@ export default function SignRequestPage() {
         return
       }
 
-      setRequest(data)
+      setRequest(data as unknown as RequestSummary)
       setLoading(false)
     }
 
@@ -66,7 +68,7 @@ export default function SignRequestPage() {
     if (!error) {
       await supabase.from("service_request_changes").insert({
         service_request_id: request.id,
-        business_name: request.business_name,
+        business_name: request.clients.business_name,
         action: "editado",
         actor: "Cliente",
         changed_fields: {
@@ -121,8 +123,8 @@ export default function SignRequestPage() {
                 </div>
                 <CardTitle>Documento firmado</CardTitle>
                 <CardDescription>
-                  Gracias, {request.representative_name}. Tu firma para{" "}
-                  {request.business_name} quedó registrada.
+                  Gracias, {request.clients.representative_name}. Tu firma
+                  para {request.clients.business_name} quedó registrada.
                 </CardDescription>
                 <img
                   src={justSigned ? signature : request.signature ?? ""}
@@ -137,7 +139,8 @@ export default function SignRequestPage() {
                 <div className="text-center">
                   <CardTitle>Firmar solicitud</CardTitle>
                   <CardDescription className="mt-1">
-                    {request.business_name} — {request.representative_name}
+                    {request.clients.business_name} —{" "}
+                    {request.clients.representative_name}
                   </CardDescription>
                 </div>
                 <p className="text-sm text-muted-foreground">

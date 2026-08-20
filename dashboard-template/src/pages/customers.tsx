@@ -34,9 +34,8 @@ import {
 import { formatCedula, formatPhoneNumber } from "@/lib/format"
 import { supabase } from "@/lib/supabase"
 
-type ServiceRequest = {
+type Client = {
   id: string
-  created_at: string
   business_name: string
   has_rnc: string
   rnc_number: string | null
@@ -49,23 +48,123 @@ type ServiceRequest = {
   is_owner: string
   id_number: string
   email: string
+  address: string | null
+}
+
+type ServiceRequest = {
+  id: string
+  created_at: string
+  client_id: string
   sector: string
   sector_other: string | null
   business_description: string
   start_date: string
   employee_count: number
-  address: string | null
   services: string[]
   referral: string
   referral_other: string | null
   signature: string | null
+  clients: Client
 }
 
-type EditableFields = Omit<ServiceRequest, "id" | "created_at">
+const CLIENT_FIELD_KEYS = [
+  "business_name",
+  "has_rnc",
+  "rnc_number",
+  "province",
+  "municipality",
+  "representative_name",
+  "sex",
+  "age",
+  "phone",
+  "is_owner",
+  "id_number",
+  "email",
+  "address",
+] as const
+
+const SERVICE_FIELD_KEYS = [
+  "sector",
+  "sector_other",
+  "business_description",
+  "start_date",
+  "employee_count",
+  "services",
+  "referral",
+  "referral_other",
+  "signature",
+] as const
+
+type ClientFieldKey = (typeof CLIENT_FIELD_KEYS)[number]
+type ServiceFieldKey = (typeof SERVICE_FIELD_KEYS)[number]
+
+type EditableFields = Pick<Client, ClientFieldKey> & Pick<ServiceRequest, ServiceFieldKey>
 
 function toEditableFields(request: ServiceRequest): EditableFields {
-  const { id: _id, created_at: _createdAt, ...editable } = request
-  return editable
+  return {
+    business_name: request.clients.business_name,
+    has_rnc: request.clients.has_rnc,
+    rnc_number: request.clients.rnc_number,
+    province: request.clients.province,
+    municipality: request.clients.municipality,
+    representative_name: request.clients.representative_name,
+    sex: request.clients.sex,
+    age: request.clients.age,
+    phone: request.clients.phone,
+    is_owner: request.clients.is_owner,
+    id_number: request.clients.id_number,
+    email: request.clients.email,
+    address: request.clients.address,
+    sector: request.sector,
+    sector_other: request.sector_other,
+    business_description: request.business_description,
+    start_date: request.start_date,
+    employee_count: request.employee_count,
+    services: request.services,
+    referral: request.referral,
+    referral_other: request.referral_other,
+    signature: request.signature,
+  }
+}
+
+function flatValue(request: ServiceRequest, key: keyof EditableFields) {
+  return (CLIENT_FIELD_KEYS as readonly string[]).includes(key)
+    ? request.clients[key as ClientFieldKey]
+    : request[key as ServiceFieldKey]
+}
+
+function applyEditableFields(
+  request: ServiceRequest,
+  fields: EditableFields
+): ServiceRequest {
+  return {
+    ...request,
+    sector: fields.sector,
+    sector_other: fields.sector_other,
+    business_description: fields.business_description,
+    start_date: fields.start_date,
+    employee_count: fields.employee_count,
+    services: fields.services,
+    referral: fields.referral,
+    referral_other: fields.referral_other,
+    signature: fields.signature,
+    clients: {
+      ...request.clients,
+      business_name: fields.business_name,
+      has_rnc: fields.has_rnc,
+      rnc_number: fields.rnc_number,
+      province: fields.province,
+      municipality: fields.municipality,
+      representative_name: fields.representative_name,
+      sex: fields.sex,
+      age: fields.age,
+      phone: fields.phone,
+      is_owner: fields.is_owner,
+      id_number: fields.id_number,
+      email: fields.email,
+      address: fields.address,
+    },
+  }
 }
 
 function formatDate(isoDate: string) {
@@ -122,7 +221,7 @@ export default function CustomersPage() {
       const { data, error } = await supabase
         .from("service_requests")
         .select(
-          "id, created_at, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, sector, sector_other, business_description, start_date, employee_count, address, services, referral, referral_other, signature"
+          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, signature, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address)"
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -134,7 +233,7 @@ export default function CustomersPage() {
         return
       }
 
-      setRequests(data)
+      setRequests(data as unknown as ServiceRequest[])
     }
 
     loadRequests()
@@ -150,12 +249,12 @@ export default function CustomersPage() {
 
     return requests.filter((request) =>
       [
-        request.business_name,
-        request.representative_name,
-        request.email,
-        request.phone,
-        request.province,
-        request.municipality,
+        request.clients.business_name,
+        request.clients.representative_name,
+        request.clients.email,
+        request.clients.phone,
+        request.clients.province,
+        request.clients.municipality,
         request.sector,
       ]
         .join(" ")
@@ -195,7 +294,7 @@ export default function CustomersPage() {
     if (!error) {
       await supabase.from("service_request_changes").insert({
         service_request_id: selected.id,
-        business_name: selected.business_name,
+        business_name: selected.clients.business_name,
         action: "eliminado",
       })
     }
@@ -232,8 +331,11 @@ export default function CustomersPage() {
     if (!selected || !editValues) return
 
     const changedFields: Record<string, { from: unknown; to: unknown }> = {}
-    for (const key of Object.keys(editValues) as (keyof EditableFields)[]) {
-      const before = JSON.stringify(selected[key])
+    for (const key of [
+      ...CLIENT_FIELD_KEYS,
+      ...SERVICE_FIELD_KEYS,
+    ] as (keyof EditableFields)[]) {
+      const before = JSON.stringify(flatValue(selected, key))
       const after = JSON.stringify(editValues[key])
       if (before === after) continue
 
@@ -243,7 +345,7 @@ export default function CustomersPage() {
           to: editValues.signature ? "(firma nueva)" : "(sin firma)",
         }
       } else {
-        changedFields[key] = { from: selected[key], to: editValues[key] }
+        changedFields[key] = { from: flatValue(selected, key), to: editValues[key] }
       }
     }
 
@@ -255,10 +357,21 @@ export default function CustomersPage() {
     setSaving(true)
     setSaveError("")
 
-    const { error } = await supabase
-      .from("service_requests")
-      .update(editValues)
-      .eq("id", selected.id)
+    const clientUpdate = Object.fromEntries(
+      CLIENT_FIELD_KEYS.map((key) => [key, editValues[key]])
+    )
+    const serviceUpdate = Object.fromEntries(
+      SERVICE_FIELD_KEYS.map((key) => [key, editValues[key]])
+    )
+
+    const [clientResult, serviceResult] = await Promise.all([
+      supabase.from("clients").update(clientUpdate).eq("id", selected.client_id),
+      supabase
+        .from("service_requests")
+        .update(serviceUpdate)
+        .eq("id", selected.id),
+    ])
+    const error = clientResult.error ?? serviceResult.error
 
     if (!error) {
       await supabase.from("service_request_changes").insert({
@@ -276,7 +389,7 @@ export default function CustomersPage() {
       return
     }
 
-    const updated: ServiceRequest = { ...selected, ...editValues }
+    const updated = applyEditableFields(selected, editValues)
     setRequests(
       (current) =>
         current?.map((request) =>
@@ -353,25 +466,25 @@ export default function CustomersPage() {
                   <Building2 className="size-4" />
                 </div>
                 <CardTitle className="mt-2 text-base">
-                  {request.business_name}
+                  {request.clients.business_name}
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  {request.representative_name}
+                  {request.clients.representative_name}
                 </p>
               </CardHeader>
               <CardContent className="flex flex-col gap-2 pb-6 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Phone className="size-3.5 shrink-0" />
-                  <span className="truncate">{request.phone}</span>
+                  <span className="truncate">{request.clients.phone}</span>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Mail className="size-3.5 shrink-0" />
-                  <span className="truncate">{request.email}</span>
+                  <span className="truncate">{request.clients.email}</span>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <MapPin className="size-3.5 shrink-0" />
                   <span className="truncate">
-                    {request.municipality}, {request.province}
+                    {request.clients.municipality}, {request.clients.province}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -411,7 +524,7 @@ export default function CustomersPage() {
       <Sheet
         open={selected !== null}
         onClose={closeSheet}
-        title={selected?.business_name}
+        title={selected?.clients.business_name}
         description={
           selected ? `Recibida el ${formatDate(selected.created_at)}` : ""
         }
@@ -498,45 +611,53 @@ export default function CustomersPage() {
           <div className="flex flex-col gap-4">
             <DetailRow
               label="Nombre del Negocio o Emprendimiento"
-              value={selected.business_name}
+              value={selected.clients.business_name}
             />
             <DetailRow
               label="¿Posee RNC?"
-              value={selected.has_rnc === "si" ? "Sí" : "No"}
+              value={selected.clients.has_rnc === "si" ? "Sí" : "No"}
             />
-            {selected.has_rnc === "si" && (
+            {selected.clients.has_rnc === "si" && (
               <DetailRow
                 label="Número de RNC"
-                value={selected.rnc_number}
+                value={selected.clients.rnc_number}
               />
             )}
             <div className="grid grid-cols-2 gap-4">
-              <DetailRow label="Provincia" value={selected.province} />
-              <DetailRow label="Municipio" value={selected.municipality} />
+              <DetailRow label="Provincia" value={selected.clients.province} />
+              <DetailRow
+                label="Municipio"
+                value={selected.clients.municipality}
+              />
             </div>
             <DetailRow
               label="Representante"
-              value={selected.representative_name}
+              value={selected.clients.representative_name}
             />
             <div className="grid grid-cols-2 gap-4">
               <DetailRow
                 label="Sexo"
-                value={selected.sex === "femenino" ? "Femenino" : "Masculino"}
+                value={
+                  selected.clients.sex === "femenino" ? "Femenino" : "Masculino"
+                }
               />
-              <DetailRow label="Edad" value={selected.age} />
+              <DetailRow label="Edad" value={selected.clients.age} />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <DetailRow label="Teléfono" value={selected.phone} />
+              <DetailRow label="Teléfono" value={selected.clients.phone} />
               <DetailRow
                 label="¿Es dueño de la empresa?"
-                value={selected.is_owner === "si" ? "Sí" : "No"}
+                value={selected.clients.is_owner === "si" ? "Sí" : "No"}
               />
             </div>
             <DetailRow
               label="Número de Cédula de Identidad y Electoral"
-              value={selected.id_number}
+              value={selected.clients.id_number}
             />
-            <DetailRow label="Correo Electrónico" value={selected.email} />
+            <DetailRow
+              label="Correo Electrónico"
+              value={selected.clients.email}
+            />
             <DetailRow
               label="Sector económico"
               value={
@@ -559,7 +680,7 @@ export default function CustomersPage() {
                 value={selected.employee_count}
               />
             </div>
-            <DetailRow label="Dirección" value={selected.address} />
+            <DetailRow label="Dirección" value={selected.clients.address} />
             <DetailRow
               label="Servicios solicitados"
               value={

@@ -1,10 +1,12 @@
 -- Ejecutar en el SQL Editor de Supabase (Project > SQL Editor > New query)
+-- Esquema completo para un proyecto nuevo. Si ya tenés datos cargados con
+-- el esquema viejo (una sola tabla service_requests), usá en cambio las
+-- migraciones en supabase/migrations en orden.
 
-create table if not exists service_requests (
+create table if not exists clients (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
 
-  -- Sección 1 — Datos del Negocio y del Representante
   business_name text not null,
   has_rnc text not null check (has_rnc in ('si', 'no')),
   rnc_number text,
@@ -17,12 +19,54 @@ create table if not exists service_requests (
   is_owner text not null check (is_owner in ('si', 'no')),
   id_number text not null,
   email text not null,
+  address text,
+
+  -- Borrado suave: al "eliminar" un cliente se marca esta columna en vez
+  -- de borrar la fila, para poder revertirlo desde el historial.
+  deleted_at timestamptz
+);
+
+alter table clients enable row level security;
+
+-- Cualquiera (incluyendo el formulario público, sin login) puede crear un
+-- cliente al enviar una solicitud.
+create policy "Cualquiera puede crear un cliente"
+  on clients for insert
+  to anon
+  with check (true);
+
+-- Sin login todavía en el dashboard: cualquiera con la anon key puede leer
+-- y editar los clientes. Esto expone datos personales (cédula, teléfono,
+-- correo) a quien inspeccione las peticiones de red del sitio. Revisar
+-- cuando se agregue autenticación al dashboard.
+create policy "Cualquiera puede ver los clientes"
+  on clients for select
+  to anon, authenticated
+  using (true);
+
+create policy "Cualquiera puede editar los clientes"
+  on clients for update
+  to anon, authenticated
+  using (true)
+  with check (true);
+
+-- Se busca por RNC (identifica al negocio) o por cédula (identifica a la
+-- persona, respaldo cuando no hay RNC) para no duplicar un cliente que ya
+-- envió una solicitud antes.
+create index if not exists clients_rnc_number_idx on clients (rnc_number);
+create index if not exists clients_id_number_idx on clients (id_number);
+
+create table if not exists service_requests (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  client_id uuid not null references clients (id),
+
+  -- Sección 1 — Servicio solicitado
   sector text not null,
   sector_other text,
   business_description text not null,
   start_date date not null,
   employee_count integer not null,
-  address text,
   services text[] not null,
   referral text not null,
   referral_other text,
@@ -32,31 +76,22 @@ create table if not exists service_requests (
   -- Firma dibujada, como imagen (data URL base64 de un PNG). Opcional.
   signature text,
 
-  -- Borrado suave: al "eliminar" un cliente desde el panel se marca esta
-  -- columna en vez de borrar la fila, para poder revertirlo desde el
-  -- historial. La lista de Clientes filtra las filas con deleted_at is not null.
+  -- Borrado suave, igual que clients.
   deleted_at timestamptz
 );
 
 alter table service_requests enable row level security;
 
--- Cualquiera (incluyendo el formulario público, sin login) puede crear una solicitud.
 create policy "Cualquiera puede enviar una solicitud"
   on service_requests for insert
   to anon
   with check (true);
 
--- Sin login todavía en el dashboard: cualquiera con la anon key puede leer
--- las solicitudes. Esto expone datos personales (cédula, teléfono, correo)
--- a quien inspeccione las peticiones de red del sitio. Revisar cuando se
--- agregue autenticación al dashboard.
 create policy "Cualquiera puede ver las solicitudes"
   on service_requests for select
   to anon, authenticated
   using (true);
 
--- Sin login todavía: cualquiera con la anon key puede editar una solicitud
--- desde el panel de Clientes. Revisar cuando se agregue autenticación.
 create policy "Cualquiera puede editar las solicitudes"
   on service_requests for update
   to anon, authenticated
