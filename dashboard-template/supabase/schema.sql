@@ -76,6 +76,11 @@ create table if not exists service_requests (
   -- Firma dibujada, como imagen (data URL base64 de un PNG). Opcional.
   signature text,
 
+  -- Estado del servicio. El estado del cliente (Nuevo/Recurrente) no se
+  -- guarda: se calcula contando servicios por client_id.
+  status text not null default 'iniciado'
+    check (status in ('iniciado', 'en_proceso', 'completo')),
+
   -- Borrado suave, igual que clients.
   deleted_at timestamptz
 );

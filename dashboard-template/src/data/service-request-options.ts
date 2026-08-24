@@ -24,6 +24,12 @@ export const serviceOptions = [
   "Asistencia técnica especializada",
 ]
 
+export const serviceStatusOptions = [
+  { value: "iniciado", label: "Inició" },
+  { value: "en_proceso", label: "En proceso" },
+  { value: "completo", label: "Completo" },
+] as const
+
 export const referralOptions = [
   "Redes Sociales",
   "Charlas o Capacitaciones",

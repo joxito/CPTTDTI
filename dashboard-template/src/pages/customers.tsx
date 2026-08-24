@@ -30,6 +30,7 @@ import {
   sectorOptions,
   serviceOptions,
   referralOptions,
+  serviceStatusOptions,
 } from "@/data/service-request-options"
 import { formatCedula, formatPhoneNumber } from "@/lib/format"
 import { supabase } from "@/lib/supabase"
@@ -64,6 +65,7 @@ type ServiceRequest = {
   referral: string
   referral_other: string | null
   signature: string | null
+  status: string
   clients: Client
 }
 
@@ -93,6 +95,7 @@ const SERVICE_FIELD_KEYS = [
   "referral",
   "referral_other",
   "signature",
+  "status",
 ] as const
 
 type ClientFieldKey = (typeof CLIENT_FIELD_KEYS)[number]
@@ -124,6 +127,7 @@ function toEditableFields(request: ServiceRequest): EditableFields {
     referral: request.referral,
     referral_other: request.referral_other,
     signature: request.signature,
+    status: request.status,
   }
 }
 
@@ -148,6 +152,7 @@ function applyEditableFields(
     referral: fields.referral,
     referral_other: fields.referral_other,
     signature: fields.signature,
+    status: fields.status,
     clients: {
       ...request.clients,
       business_name: fields.business_name,
@@ -173,6 +178,19 @@ function formatDate(isoDate: string) {
     month: "short",
     year: "numeric",
   })
+}
+
+function serviceStatusLabel(status: string) {
+  return (
+    serviceStatusOptions.find((option) => option.value === status)?.label ??
+    status
+  )
+}
+
+function serviceStatusBadgeVariant(status: string) {
+  if (status === "completo") return "success" as const
+  if (status === "en_proceso") return "secondary" as const
+  return "outline" as const
 }
 
 function DetailRow({
@@ -221,7 +239,7 @@ export default function CustomersPage() {
       const { data, error } = await supabase
         .from("service_requests")
         .select(
-          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, signature, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address)"
+          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, signature, status, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address)"
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -262,6 +280,16 @@ export default function CustomersPage() {
         .includes(normalizedQuery)
     )
   }, [requests, query])
+
+  // Estado del cliente (Nuevo/Recurrente): se calcula contando cuántos
+  // servicios activos tiene cada client_id, no se guarda en la base.
+  const clientServiceCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const request of requests ?? []) {
+      counts.set(request.client_id, (counts.get(request.client_id) ?? 0) + 1)
+    }
+    return counts
+  }, [requests])
 
   function openRequest(request: ServiceRequest) {
     setSelected(request)
@@ -499,6 +527,14 @@ export default function CustomersPage() {
                       Sin firmar
                     </Badge>
                   )}
+                  <Badge variant="outline">
+                    {(clientServiceCounts.get(request.client_id) ?? 1) > 1
+                      ? "Recurrente"
+                      : "Nuevo"}
+                  </Badge>
+                  <Badge variant={serviceStatusBadgeVariant(request.status)}>
+                    {serviceStatusLabel(request.status)}
+                  </Badge>
                   <Badge variant="secondary">
                     {request.sector === "Otro"
                       ? request.sector_other
@@ -609,6 +645,16 @@ export default function CustomersPage() {
       >
         {selected && !editing && (
           <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap gap-1.5">
+              <Badge variant="outline">
+                {(clientServiceCounts.get(selected.client_id) ?? 1) > 1
+                  ? "Cliente recurrente"
+                  : "Cliente nuevo"}
+              </Badge>
+              <Badge variant={serviceStatusBadgeVariant(selected.status)}>
+                {serviceStatusLabel(selected.status)}
+              </Badge>
+            </div>
             <DetailRow
               label="Nombre del Negocio o Emprendimiento"
               value={selected.clients.business_name}
@@ -728,6 +774,23 @@ export default function CustomersPage() {
             {saveError && (
               <p className="text-sm text-destructive">{saveError}</p>
             )}
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-status">Estado del servicio</Label>
+              <Select
+                id="edit-status"
+                value={editValues.status}
+                onChange={(event) =>
+                  updateEditValue("status", event.target.value)
+                }
+              >
+                {serviceStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="edit-business-name">

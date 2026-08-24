@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import {
+  AlertTriangle,
   Camera,
   Check,
   CheckCircle2,
@@ -71,6 +72,12 @@ export default function ServiceRequestPage({
   const [linkCopied, setLinkCopied] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
+  const [yearLimitWarning, setYearLimitWarning] = useState<{
+    clientId: string
+    businessName: unknown
+    servicePayload: Record<string, unknown>
+    count: number
+  } | null>(null)
   const section1Ref = useRef<HTMLDivElement>(null)
   const section2Ref = useRef<HTMLDivElement>(null)
   const idPhotosInputRef = useRef<HTMLInputElement>(null)
@@ -133,6 +140,49 @@ export default function ServiceRequestPage({
         </div>
         {content}
       </div>
+    )
+  }
+
+  async function saveService(
+    clientId: string,
+    businessName: unknown,
+    servicePayload: Record<string, unknown>
+  ) {
+    const { data, error } = await supabase
+      .from("service_requests")
+      .insert({ client_id: clientId, ...servicePayload })
+      .select("id")
+      .single()
+
+    if (!error && data) {
+      await supabase.from("service_request_changes").insert({
+        service_request_id: data.id,
+        business_name: businessName,
+        action: "creado",
+        actor: standalone ? "Cliente" : "Usuario",
+      })
+    }
+
+    setSubmitting(false)
+    setYearLimitWarning(null)
+
+    if (error) {
+      setSubmitError(
+        "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
+      )
+      return
+    }
+
+    setSubmitted(true)
+  }
+
+  async function handleConfirmYearLimit() {
+    if (!yearLimitWarning) return
+    setSubmitting(true)
+    await saveService(
+      yearLimitWarning.clientId,
+      yearLimitWarning.businessName,
+      yearLimitWarning.servicePayload
     )
   }
 
@@ -215,6 +265,7 @@ export default function ServiceRequestPage({
     }
 
     let clientId = existingClient?.id as string | undefined
+    const isExistingClient = Boolean(clientId)
 
     if (clientId) {
       const { error: updateClientError } = await supabase
@@ -247,43 +298,42 @@ export default function ServiceRequestPage({
       clientId = newClient.id
     }
 
-    const { data, error } = await supabase
-      .from("service_requests")
-      .insert({
-        client_id: clientId,
-        sector: formData.get("sector"),
-        sector_other: formData.get("sectorOther") || null,
-        business_description: formData.get("businessDescription"),
-        start_date: formData.get("startDate"),
-        employee_count: Number(formData.get("employeeCount")),
-        services,
-        referral: formData.get("referral"),
-        referral_other: formData.get("referralOther") || null,
-        confidentiality: formData.get("confidentiality"),
-        signature: signature || null,
-      })
-      .select("id")
-      .single()
-
-    if (!error && data) {
-      await supabase.from("service_request_changes").insert({
-        service_request_id: data.id,
-        business_name: clientFields.business_name,
-        action: "creado",
-        actor: standalone ? "Cliente" : "Usuario",
-      })
+    const servicePayload = {
+      sector: formData.get("sector"),
+      sector_other: formData.get("sectorOther") || null,
+      business_description: formData.get("businessDescription"),
+      start_date: formData.get("startDate"),
+      employee_count: Number(formData.get("employeeCount")),
+      services,
+      referral: formData.get("referral"),
+      referral_other: formData.get("referralOther") || null,
+      confidentiality: formData.get("confidentiality"),
+      signature: signature || null,
     }
 
-    setSubmitting(false)
+    if (isExistingClient && clientId) {
+      const currentYear = new Date().getFullYear()
+      const { count, error: countError } = await supabase
+        .from("service_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("client_id", clientId)
+        .is("deleted_at", null)
+        .gte("created_at", `${currentYear}-01-01`)
+        .lt("created_at", `${currentYear + 1}-01-01`)
 
-    if (error) {
-      setSubmitError(
-        "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
-      )
-      return
+      if (!countError && (count ?? 0) >= 2) {
+        setSubmitting(false)
+        setYearLimitWarning({
+          clientId,
+          businessName: clientFields.business_name,
+          servicePayload,
+          count: count ?? 0,
+        })
+        return
+      }
     }
 
-    setSubmitted(true)
+    await saveService(clientId as string, clientFields.business_name, servicePayload)
   }
 
   const phoneAreaCode = phone.slice(0, 3)
@@ -292,6 +342,45 @@ export default function ServiceRequestPage({
 
   const isEmailInvalid =
     emailTouched && email.length > 0 && !emailPattern.test(email)
+
+  if (yearLimitWarning) {
+    return renderShell(
+      <div className="mx-auto flex max-w-2xl flex-col gap-6">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+              <AlertTriangle className="size-5" />
+            </div>
+            <CardTitle>Límite de servicios por año</CardTitle>
+            <CardDescription>
+              Este cliente ya tiene {yearLimitWarning.count} servicios
+              registrados este año. ¿Confirmás que querés registrar uno más?
+            </CardDescription>
+            {submitError && (
+              <p className="text-sm text-destructive">{submitError}</p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setYearLimitWarning(null)}
+                disabled={submitting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleConfirmYearLimit}
+                disabled={submitting}
+              >
+                {submitting ? "Guardando..." : "Sí, registrar de todas formas"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   if (submitted) {
     return renderShell(
