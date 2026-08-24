@@ -15,6 +15,13 @@ export function formatPhoneNumber(rawValue: string) {
   return formatted
 }
 
+export function initialsFromName(name: string | null | undefined) {
+  if (!name) return "?"
+  const parts = name.trim().split(/\s+/)
+  const initials = parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "")
+  return initials.join("") || "?"
+}
+
 export function formatCedula(rawValue: string) {
   const digits = rawValue.replace(/\D/g, "").slice(0, 11)
   const office = digits.slice(0, 3)

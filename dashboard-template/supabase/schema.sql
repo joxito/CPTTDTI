@@ -1,7 +1,10 @@
 -- Ejecutar en el SQL Editor de Supabase (Project > SQL Editor > New query)
 -- Esquema completo para un proyecto nuevo. Si ya tenés datos cargados con
--- el esquema viejo (una sola tabla service_requests), usá en cambio las
--- migraciones en supabase/migrations en orden.
+-- un esquema viejo, usá en cambio las migraciones en supabase/migrations
+-- en orden. Después de correr este archivo, creá la cuenta
+-- cptt@ipl.edu.do desde Authentication > Users > Add user en el Dashboard
+-- de Supabase — su fila en staff se inserta sola en cuanto esa cuenta
+-- exista (ver el final de este archivo).
 
 create table if not exists clients (
   id uuid primary key default gen_random_uuid(),
@@ -28,25 +31,23 @@ create table if not exists clients (
 
 alter table clients enable row level security;
 
--- Cualquiera (incluyendo el formulario público, sin login) puede crear un
--- cliente al enviar una solicitud.
-create policy "Cualquiera puede crear un cliente"
+-- El dashboard requiere sesión (ver "staff" y las políticas al final de
+-- este archivo). El formulario público y la firma no tienen login: pasan
+-- por las funciones security definer de abajo, que no dependen de estas
+-- políticas.
+create policy "Staff autenticado crea clientes"
   on clients for insert
-  to anon
+  to authenticated
   with check (true);
 
--- Sin login todavía en el dashboard: cualquiera con la anon key puede leer
--- y editar los clientes. Esto expone datos personales (cédula, teléfono,
--- correo) a quien inspeccione las peticiones de red del sitio. Revisar
--- cuando se agregue autenticación al dashboard.
-create policy "Cualquiera puede ver los clientes"
+create policy "Staff autenticado ve los clientes"
   on clients for select
-  to anon, authenticated
+  to authenticated
   using (true);
 
-create policy "Cualquiera puede editar los clientes"
+create policy "Staff autenticado edita los clientes"
   on clients for update
-  to anon, authenticated
+  to authenticated
   using (true)
   with check (true);
 
@@ -87,19 +88,19 @@ create table if not exists service_requests (
 
 alter table service_requests enable row level security;
 
-create policy "Cualquiera puede enviar una solicitud"
+create policy "Staff autenticado crea solicitudes"
   on service_requests for insert
-  to anon
+  to authenticated
   with check (true);
 
-create policy "Cualquiera puede ver las solicitudes"
+create policy "Staff autenticado ve las solicitudes"
   on service_requests for select
-  to anon, authenticated
+  to authenticated
   using (true);
 
-create policy "Cualquiera puede editar las solicitudes"
+create policy "Staff autenticado edita las solicitudes"
   on service_requests for update
-  to anon, authenticated
+  to authenticated
   using (true)
   with check (true);
 
@@ -113,23 +114,23 @@ create table if not exists service_request_changes (
   service_request_id uuid not null references service_requests (id),
   business_name text not null,
   action text not null check (action in ('creado', 'editado', 'eliminado', 'restaurado')),
-  -- Sin login todavía en el dashboard, no hay forma de saber qué persona
-  -- del staff hizo cada cambio: queda fijo en 'Usuario' hasta que se
-  -- agregue autenticación.
+  -- 'Cliente' cuando la acción vino del formulario público o del enlace de
+  -- firma; 'Usuario' (o el nombre real, una vez con sesión) desde el
+  -- dashboard.
   actor text not null default 'Usuario',
   changed_fields jsonb
 );
 
 alter table service_request_changes enable row level security;
 
-create policy "Cualquiera puede ver el historial"
+create policy "Staff autenticado ve el historial"
   on service_request_changes for select
-  to anon, authenticated
+  to authenticated
   using (true);
 
-create policy "Cualquiera puede registrar cambios en el historial"
+create policy "Staff autenticado registra cambios en el historial"
   on service_request_changes for insert
-  to anon, authenticated
+  to authenticated
   with check (true);
 
 -- Bitácora: una nota es sobre un cliente o sobre un servicio puntual,
@@ -150,20 +151,280 @@ create table if not exists notes (
 
 alter table notes enable row level security;
 
-create policy "Cualquiera puede ver las notas"
+create policy "Staff autenticado ve las notas"
   on notes for select
-  to anon, authenticated
+  to authenticated
   using (true);
 
-create policy "Cualquiera puede crear notas"
+create policy "Staff autenticado crea notas"
   on notes for insert
-  to anon, authenticated
+  to authenticated
   with check (true);
 
-create policy "Cualquiera puede eliminar notas"
+create policy "Staff autenticado elimina notas"
   on notes for delete
-  to anon, authenticated
+  to authenticated
   using (true);
 
 create index if not exists notes_client_id_idx on notes (client_id);
 create index if not exists notes_service_request_id_idx on notes (service_request_id);
+
+-- Sistema de usuarios: cada fila de staff corresponde a una cuenta de
+-- auth.users. cptt@ipl.edu.do es la cuenta creadora: intocable (no se
+-- puede eliminar ni cambiarle el rol) y la única que puede agregar,
+-- editar o eliminar otras cuentas.
+create table if not exists staff (
+  id uuid primary key references auth.users (id) on delete cascade,
+  email text not null unique,
+  name text not null,
+  role text not null check (role in ('administrador', 'editor')),
+  -- Foto de perfil como data URL base64, mismo patrón que la firma.
+  photo text,
+  created_at timestamptz not null default now(),
+
+  constraint creator_is_admin
+    check (email <> 'cptt@ipl.edu.do' or role = 'administrador')
+);
+
+alter table staff enable row level security;
+
+create policy "Staff autenticado puede ver el staff"
+  on staff for select
+  to authenticated
+  using (true);
+
+create policy "Solo la cuenta creadora agrega usuarios"
+  on staff for insert
+  to authenticated
+  with check ((auth.jwt() ->> 'email') = 'cptt@ipl.edu.do');
+
+create policy "Creador edita cualquiera, cada quien su propio perfil"
+  on staff for update
+  to authenticated
+  using ((auth.jwt() ->> 'email') = 'cptt@ipl.edu.do' or auth.uid() = id)
+  with check ((auth.jwt() ->> 'email') = 'cptt@ipl.edu.do' or auth.uid() = id);
+
+create policy "Solo la cuenta creadora elimina, y no a sí misma"
+  on staff for delete
+  to authenticated
+  using (
+    (auth.jwt() ->> 'email') = 'cptt@ipl.edu.do'
+    and email <> 'cptt@ipl.edu.do'
+  );
+
+-- Nadie que no sea la cuenta creadora puede cambiarse el rol a sí mismo,
+-- ni siquiera vía la política de "cada quien su propio perfil".
+create or replace function staff_prevent_self_role_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.role <> old.role and (auth.jwt() ->> 'email') <> 'cptt@ipl.edu.do' then
+    raise exception 'Solo cptt@ipl.edu.do puede cambiar roles de usuario';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger staff_role_guard
+  before update on staff
+  for each row execute function staff_prevent_self_role_change();
+
+-- Vista sin correo, para quien no sea la cuenta creadora.
+create or replace view staff_directory as
+  select id, name, role, photo from staff;
+
+grant select on staff_directory to authenticated;
+
+-- Funciones para los dos flujos públicos (sin login): el formulario de
+-- solicitud de servicios y la página de firma. Cada una hace exactamente
+-- una cosa puntual y acotada — no exponen el resto de la tabla a la anon
+-- key, a diferencia de un acceso directo con RLS abierta.
+
+create or replace function find_or_create_client(p_client jsonb)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_rnc text := p_client ->> 'rnc_number';
+  v_id_number text := p_client ->> 'id_number';
+  v_client_id uuid;
+begin
+  if v_rnc is not null then
+    select id into v_client_id from clients
+      where rnc_number = v_rnc and deleted_at is null;
+  else
+    select id into v_client_id from clients
+      where id_number = v_id_number and deleted_at is null;
+  end if;
+
+  if v_client_id is not null then
+    update clients set
+      business_name = p_client ->> 'business_name',
+      has_rnc = p_client ->> 'has_rnc',
+      rnc_number = v_rnc,
+      province = p_client ->> 'province',
+      municipality = p_client ->> 'municipality',
+      representative_name = p_client ->> 'representative_name',
+      sex = p_client ->> 'sex',
+      age = (p_client ->> 'age')::int,
+      phone = p_client ->> 'phone',
+      is_owner = p_client ->> 'is_owner',
+      id_number = v_id_number,
+      email = p_client ->> 'email',
+      address = p_client ->> 'address'
+    where id = v_client_id;
+    return v_client_id;
+  end if;
+
+  insert into clients (
+    business_name, has_rnc, rnc_number, province, municipality,
+    representative_name, sex, age, phone, is_owner, id_number, email, address
+  ) values (
+    p_client ->> 'business_name',
+    p_client ->> 'has_rnc',
+    v_rnc,
+    p_client ->> 'province',
+    p_client ->> 'municipality',
+    p_client ->> 'representative_name',
+    p_client ->> 'sex',
+    (p_client ->> 'age')::int,
+    p_client ->> 'phone',
+    p_client ->> 'is_owner',
+    v_id_number,
+    p_client ->> 'email',
+    p_client ->> 'address'
+  ) returning id into v_client_id;
+
+  return v_client_id;
+end;
+$$;
+
+grant execute on function find_or_create_client(jsonb) to anon, authenticated;
+
+create or replace function count_client_services_this_year(p_client_id uuid, p_year int)
+returns int
+language sql
+security definer
+set search_path = public
+as $$
+  select count(*)::int from service_requests
+    where client_id = p_client_id
+      and deleted_at is null
+      and created_at >= (p_year || '-01-01')::timestamptz
+      and created_at < ((p_year + 1) || '-01-01')::timestamptz;
+$$;
+
+grant execute on function count_client_services_this_year(uuid, int) to anon, authenticated;
+
+create or replace function submit_service_request(
+  p_client_id uuid,
+  p_service jsonb,
+  p_actor text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_request_id uuid;
+  v_business_name text;
+begin
+  insert into service_requests (
+    client_id, sector, sector_other, business_description, start_date,
+    employee_count, services, referral, referral_other, confidentiality,
+    signature
+  )
+  values (
+    p_client_id,
+    p_service ->> 'sector',
+    p_service ->> 'sector_other',
+    p_service ->> 'business_description',
+    (p_service ->> 'start_date')::date,
+    (p_service ->> 'employee_count')::int,
+    array(select jsonb_array_elements_text(p_service -> 'services')),
+    p_service ->> 'referral',
+    p_service ->> 'referral_other',
+    p_service ->> 'confidentiality',
+    p_service ->> 'signature'
+  )
+  returning id into v_request_id;
+
+  select business_name into v_business_name from clients where id = p_client_id;
+
+  insert into service_request_changes (service_request_id, business_name, action, actor)
+  values (v_request_id, v_business_name, 'creado', p_actor);
+
+  return v_request_id;
+end;
+$$;
+
+grant execute on function submit_service_request(uuid, jsonb, text) to anon, authenticated;
+
+create or replace function get_signing_info(p_request_id uuid)
+returns table (
+  id uuid,
+  signature text,
+  business_name text,
+  representative_name text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select sr.id, sr.signature, c.business_name, c.representative_name
+  from service_requests sr
+  join clients c on c.id = sr.client_id
+  where sr.id = p_request_id and sr.deleted_at is null;
+$$;
+
+grant execute on function get_signing_info(uuid) to anon, authenticated;
+
+create or replace function sign_service_request(p_request_id uuid, p_signature text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_client_id uuid;
+  v_business_name text;
+begin
+  update service_requests
+    set signature = p_signature
+    where id = p_request_id and deleted_at is null
+    returning client_id into v_client_id;
+
+  if v_client_id is null then
+    raise exception 'Solicitud no encontrada';
+  end if;
+
+  select business_name into v_business_name from clients where id = v_client_id;
+
+  insert into service_request_changes (service_request_id, business_name, action, actor, changed_fields)
+  values (
+    p_request_id,
+    v_business_name,
+    'editado',
+    'Cliente',
+    jsonb_build_object(
+      'signature', jsonb_build_object('from', '(sin firma)', 'to', '(firma nueva)')
+    )
+  );
+end;
+$$;
+
+grant execute on function sign_service_request(uuid, text) to anon, authenticated;
+
+-- Inserta la fila de la cuenta creadora en cuanto exista en auth.users.
+-- No hace nada si ya está insertada o si todavía no se creó la cuenta.
+insert into staff (id, email, name, role)
+select id, email, 'CPTT Loyola', 'administrador'
+from auth.users
+where email = 'cptt@ipl.edu.do'
+on conflict (id) do nothing;

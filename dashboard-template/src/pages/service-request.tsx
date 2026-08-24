@@ -74,7 +74,6 @@ export default function ServiceRequestPage({
   const [submitError, setSubmitError] = useState("")
   const [yearLimitWarning, setYearLimitWarning] = useState<{
     clientId: string
-    businessName: unknown
     servicePayload: Record<string, unknown>
     count: number
   } | null>(null)
@@ -145,23 +144,13 @@ export default function ServiceRequestPage({
 
   async function saveService(
     clientId: string,
-    businessName: unknown,
     servicePayload: Record<string, unknown>
   ) {
-    const { data, error } = await supabase
-      .from("service_requests")
-      .insert({ client_id: clientId, ...servicePayload })
-      .select("id")
-      .single()
-
-    if (!error && data) {
-      await supabase.from("service_request_changes").insert({
-        service_request_id: data.id,
-        business_name: businessName,
-        action: "creado",
-        actor: standalone ? "Cliente" : "Usuario",
-      })
-    }
+    const { error } = await supabase.rpc("submit_service_request", {
+      p_client_id: clientId,
+      p_service: servicePayload,
+      p_actor: standalone ? "Cliente" : "Usuario",
+    })
 
     setSubmitting(false)
     setYearLimitWarning(null)
@@ -179,11 +168,7 @@ export default function ServiceRequestPage({
   async function handleConfirmYearLimit() {
     if (!yearLimitWarning) return
     setSubmitting(true)
-    await saveService(
-      yearLimitWarning.clientId,
-      yearLimitWarning.businessName,
-      yearLimitWarning.servicePayload
-    )
+    await saveService(yearLimitWarning.clientId, yearLimitWarning.servicePayload)
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -237,65 +222,19 @@ export default function ServiceRequestPage({
     }
 
     // El RNC identifica al negocio; la cédula identifica a la persona y
-    // sirve de respaldo cuando no hay RNC. Así no se duplica un cliente
-    // que ya envió una solicitud antes.
-    const existingClientQuery = rncNumber
-      ? supabase
-          .from("clients")
-          .select("id")
-          .eq("rnc_number", rncNumber)
-          .is("deleted_at", null)
-          .maybeSingle()
-      : supabase
-          .from("clients")
-          .select("id")
-          .eq("id_number", idNumber)
-          .is("deleted_at", null)
-          .maybeSingle()
+    // sirve de respaldo cuando no hay RNC. find_or_create_client busca por
+    // uno de los dos y actualiza si ya existe, o crea uno nuevo si no.
+    const { data: clientId, error: clientError } = await supabase.rpc(
+      "find_or_create_client",
+      { p_client: clientFields }
+    )
 
-    const { data: existingClient, error: lookupError } =
-      await existingClientQuery
-
-    if (lookupError) {
+    if (clientError || !clientId) {
       setSubmitting(false)
       setSubmitError(
         "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
       )
       return
-    }
-
-    let clientId = existingClient?.id as string | undefined
-    const isExistingClient = Boolean(clientId)
-
-    if (clientId) {
-      const { error: updateClientError } = await supabase
-        .from("clients")
-        .update(clientFields)
-        .eq("id", clientId)
-
-      if (updateClientError) {
-        setSubmitting(false)
-        setSubmitError(
-          "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
-        )
-        return
-      }
-    } else {
-      const { data: newClient, error: createClientError } = await supabase
-        .from("clients")
-        .insert(clientFields)
-        .select("id")
-        .single()
-
-      if (createClientError || !newClient) {
-        setSubmitting(false)
-        setSubmitError(
-          "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
-        )
-        return
-      }
-
-      clientId = newClient.id
     }
 
     const servicePayload = {
@@ -311,29 +250,19 @@ export default function ServiceRequestPage({
       signature: signature || null,
     }
 
-    if (isExistingClient && clientId) {
-      const currentYear = new Date().getFullYear()
-      const { count, error: countError } = await supabase
-        .from("service_requests")
-        .select("id", { count: "exact", head: true })
-        .eq("client_id", clientId)
-        .is("deleted_at", null)
-        .gte("created_at", `${currentYear}-01-01`)
-        .lt("created_at", `${currentYear + 1}-01-01`)
+    const currentYear = new Date().getFullYear()
+    const { data: count } = await supabase.rpc(
+      "count_client_services_this_year",
+      { p_client_id: clientId, p_year: currentYear }
+    )
 
-      if (!countError && (count ?? 0) >= 2) {
-        setSubmitting(false)
-        setYearLimitWarning({
-          clientId,
-          businessName: clientFields.business_name,
-          servicePayload,
-          count: count ?? 0,
-        })
-        return
-      }
+    if ((count ?? 0) >= 2) {
+      setSubmitting(false)
+      setYearLimitWarning({ clientId, servicePayload, count: count ?? 0 })
+      return
     }
 
-    await saveService(clientId as string, clientFields.business_name, servicePayload)
+    await saveService(clientId, servicePayload)
   }
 
   const phoneAreaCode = phone.slice(0, 3)

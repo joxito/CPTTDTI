@@ -35,10 +35,7 @@ export default function SignRequestPage() {
     async function load() {
       if (!id) return
       const { data, error } = await supabase
-        .from("service_requests")
-        .select("id, signature, clients(business_name, representative_name)")
-        .eq("id", id)
-        .is("deleted_at", null)
+        .rpc("get_signing_info", { p_request_id: id })
         .single()
 
       if (error || !data) {
@@ -47,7 +44,21 @@ export default function SignRequestPage() {
         return
       }
 
-      setRequest(data as unknown as RequestSummary)
+      const signingInfo = data as {
+        id: string
+        signature: string | null
+        business_name: string
+        representative_name: string
+      }
+
+      setRequest({
+        id: signingInfo.id,
+        signature: signingInfo.signature,
+        clients: {
+          business_name: signingInfo.business_name,
+          representative_name: signingInfo.representative_name,
+        },
+      })
       setLoading(false)
     }
 
@@ -60,22 +71,10 @@ export default function SignRequestPage() {
     setSaving(true)
     setSaveError("")
 
-    const { error } = await supabase
-      .from("service_requests")
-      .update({ signature })
-      .eq("id", request.id)
-
-    if (!error) {
-      await supabase.from("service_request_changes").insert({
-        service_request_id: request.id,
-        business_name: request.clients.business_name,
-        action: "editado",
-        actor: "Cliente",
-        changed_fields: {
-          signature: { from: "(sin firma)", to: "(firma nueva)" },
-        },
-      })
-    }
+    const { error } = await supabase.rpc("sign_service_request", {
+      p_request_id: request.id,
+      p_signature: signature,
+    })
 
     setSaving(false)
 

@@ -13,6 +13,9 @@ dist-ssr
 *.local
 .env
 
+# Cache local de la CLI de Supabase, no es config del proyecto.
+supabase/.temp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
