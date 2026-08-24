@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import * as XLSX from "xlsx"
 import {
   Building2,
   Calendar,
@@ -264,30 +265,11 @@ function getPeriodRange(period: Exclude<PeriodPreset, "custom">) {
   }
 }
 
-// Excel en español usa la coma como separador decimal, así que al abrir un
-// CSV separado por comas mete todo en una sola columna. Se usa punto y
-// coma como separador de campo, que es lo que Excel en esa configuración
-// regional espera.
-function toCsvValue(value: unknown) {
-  const str = String(value ?? "")
-  if (/[";\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`
-  }
-  return str
-}
-
-function downloadCsv(rows: string[][], filename: string) {
-  const csvContent =
-    "﻿" + rows.map((row) => row.map(toCsvValue).join(";")).join("\r\n")
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement("a")
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
+function downloadXlsx(rows: Record<string, string>[], filename: string) {
+  const sheet = XLSX.utils.json_to_sheet(rows)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, sheet, "Clientes")
+  XLSX.writeFile(workbook, filename)
 }
 
 function DetailRow({
@@ -395,26 +377,6 @@ export default function CustomersPage() {
   function handleExport() {
     if (!filteredRequests || filteredRequests.length === 0) return
 
-    const headers = [
-      "Negocio",
-      "Representante",
-      "Cédula",
-      "RNC",
-      "Teléfono",
-      "Correo",
-      "Provincia",
-      "Municipio",
-      "Dirección",
-      "Sector",
-      "Descripción",
-      "Servicios solicitados",
-      "Estado del cliente",
-      "Estado del servicio",
-      "Cómo se enteró",
-      "Firmado",
-      "Fecha de solicitud",
-    ]
-
     const rows = filteredRequests.map((request) => {
       const client = request.clients
       const isRecurring =
@@ -426,30 +388,30 @@ export default function CustomersPage() {
           ? request.referral_other ?? ""
           : request.referral
 
-      return [
-        client.business_name,
-        client.representative_name,
-        client.id_number,
-        client.rnc_number ?? "",
-        client.phone,
-        client.email,
-        client.province,
-        client.municipality,
-        client.address ?? "",
-        sector,
-        request.business_description,
-        request.services.join("; "),
-        isRecurring ? "Recurrente" : "Nuevo",
-        serviceStatusLabel(request.status),
-        referral,
-        request.signature ? "Sí" : "No",
-        request.created_at.slice(0, 10),
-      ]
+      return {
+        Negocio: client.business_name,
+        Representante: client.representative_name,
+        Cédula: client.id_number,
+        RNC: client.rnc_number ?? "",
+        Teléfono: client.phone,
+        Correo: client.email,
+        Provincia: client.province,
+        Municipio: client.municipality,
+        Dirección: client.address ?? "",
+        Sector: sector,
+        Descripción: request.business_description,
+        "Servicios solicitados": request.services.join("; "),
+        "Estado del cliente": isRecurring ? "Recurrente" : "Nuevo",
+        "Estado del servicio": serviceStatusLabel(request.status),
+        "Cómo se enteró": referral,
+        Firmado: request.signature ? "Sí" : "No",
+        "Fecha de solicitud": request.created_at.slice(0, 10),
+      }
     })
 
     const from = dateFrom || "todas"
     const to = dateTo || "todas"
-    downloadCsv([headers, ...rows], `clientes_${from}_a_${to}.csv`)
+    downloadXlsx(rows, `clientes_${from}_a_${to}.xlsx`)
   }
 
   async function handleCopySignLink() {
