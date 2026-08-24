@@ -3,6 +3,7 @@ import {
   Building2,
   Calendar,
   Check,
+  Download,
   Link as LinkIcon,
   Mail,
   MapPin,
@@ -204,6 +205,87 @@ function serviceStatusBadgeVariant(status: string) {
   return "outline" as const
 }
 
+type PeriodPreset =
+  | "semana"
+  | "mes"
+  | "trimestre"
+  | "cuatrimestre"
+  | "semestre"
+  | "custom"
+
+const periodPresetOptions: { value: PeriodPreset; label: string }[] = [
+  { value: "semana", label: "Semana" },
+  { value: "mes", label: "Mes" },
+  { value: "trimestre", label: "Trimestre" },
+  { value: "cuatrimestre", label: "Cuatrimestre" },
+  { value: "semestre", label: "Semestre" },
+  { value: "custom", label: "Personalizado" },
+]
+
+function formatDateInput(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+// Períodos alineados al calendario (no configurables): la semana empieza
+// el lunes, y trimestre/cuatrimestre/semestre se calculan desde enero.
+function getPeriodRange(period: Exclude<PeriodPreset, "custom">) {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+
+  if (period === "semana") {
+    const day = now.getDay()
+    const diffToMonday = day === 0 ? -6 : 1 - day
+    const monday = new Date(year, month, now.getDate() + diffToMonday)
+    const sunday = new Date(year, month, monday.getDate() + 6)
+    return { from: formatDateInput(monday), to: formatDateInput(sunday) }
+  }
+
+  if (period === "mes") {
+    return {
+      from: formatDateInput(new Date(year, month, 1)),
+      to: formatDateInput(new Date(year, month + 1, 0)),
+    }
+  }
+
+  const spans: Record<Exclude<PeriodPreset, "custom" | "semana" | "mes">, number> = {
+    trimestre: 3,
+    cuatrimestre: 4,
+    semestre: 6,
+  }
+  const span = spans[period]
+  const startMonth = Math.floor(month / span) * span
+  return {
+    from: formatDateInput(new Date(year, startMonth, 1)),
+    to: formatDateInput(new Date(year, startMonth + span, 0)),
+  }
+}
+
+function toCsvValue(value: unknown) {
+  const str = String(value ?? "")
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  return str
+}
+
+function downloadCsv(rows: string[][], filename: string) {
+  const csvContent =
+    "﻿" + rows.map((row) => row.map(toCsvValue).join(",")).join("\r\n")
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
 function DetailRow({
   label,
   value,
@@ -233,6 +315,7 @@ export default function CustomersPage() {
   const [serviceStatusFilter, setServiceStatusFilter] = useState<
     "all" | "iniciado" | "en_proceso" | "completo"
   >("all")
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("custom")
   const [selected, setSelected] = useState<ServiceRequest | null>(null)
   const [editing, setEditing] = useState(false)
   const [editValues, setEditValues] = useState<EditableFields | null>(null)
@@ -303,6 +386,66 @@ export default function CustomersPage() {
       return
     }
     setNotes((current) => current?.filter((note) => note.id !== noteId) ?? current)
+  }
+
+  function handleExport() {
+    if (!filteredRequests || filteredRequests.length === 0) return
+
+    const headers = [
+      "Negocio",
+      "Representante",
+      "Cédula",
+      "RNC",
+      "Teléfono",
+      "Correo",
+      "Provincia",
+      "Municipio",
+      "Dirección",
+      "Sector",
+      "Descripción",
+      "Servicios solicitados",
+      "Estado del cliente",
+      "Estado del servicio",
+      "Cómo se enteró",
+      "Firmado",
+      "Fecha de solicitud",
+    ]
+
+    const rows = filteredRequests.map((request) => {
+      const client = request.clients
+      const isRecurring =
+        (clientServiceCounts.get(request.client_id) ?? 1) > 1
+      const sector =
+        request.sector === "Otro" ? request.sector_other ?? "" : request.sector
+      const referral =
+        request.referral === "Otro"
+          ? request.referral_other ?? ""
+          : request.referral
+
+      return [
+        client.business_name,
+        client.representative_name,
+        client.id_number,
+        client.rnc_number ?? "",
+        client.phone,
+        client.email,
+        client.province,
+        client.municipality,
+        client.address ?? "",
+        sector,
+        request.business_description,
+        request.services.join("; "),
+        isRecurring ? "Recurrente" : "Nuevo",
+        serviceStatusLabel(request.status),
+        referral,
+        request.signature ? "Sí" : "No",
+        request.created_at.slice(0, 10),
+      ]
+    })
+
+    const from = dateFrom || "todas"
+    const to = dateTo || "todas"
+    downloadCsv([headers, ...rows], `clientes_${from}_a_${to}.csv`)
   }
 
   async function handleCopySignLink() {
@@ -560,6 +703,27 @@ export default function CustomersPage() {
             />
           </div>
 
+          <div className="flex flex-wrap items-center gap-1.5">
+            {periodPresetOptions.map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                size="sm"
+                variant={periodPreset === option.value ? "default" : "outline"}
+                onClick={() => {
+                  setPeriodPreset(option.value)
+                  if (option.value !== "custom") {
+                    const range = getPeriodRange(option.value)
+                    setDateFrom(range.from)
+                    setDateTo(range.to)
+                  }
+                }}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1">
               <Label htmlFor="filter-date-from" className="text-xs">
@@ -569,7 +733,10 @@ export default function CustomersPage() {
                 id="filter-date-from"
                 type="date"
                 value={dateFrom}
-                onChange={(event) => setDateFrom(event.target.value)}
+                onChange={(event) => {
+                  setDateFrom(event.target.value)
+                  setPeriodPreset("custom")
+                }}
                 className="w-40"
               />
             </div>
@@ -581,7 +748,10 @@ export default function CustomersPage() {
                 id="filter-date-to"
                 type="date"
                 value={dateTo}
-                onChange={(event) => setDateTo(event.target.value)}
+                onChange={(event) => {
+                  setDateTo(event.target.value)
+                  setPeriodPreset("custom")
+                }}
                 className="w-40"
               />
             </div>
@@ -637,6 +807,7 @@ export default function CustomersPage() {
                 onClick={() => {
                   setDateFrom("")
                   setDateTo("")
+                  setPeriodPreset("custom")
                   setClientStatusFilter("all")
                   setServiceStatusFilter("all")
                 }}
@@ -644,6 +815,17 @@ export default function CustomersPage() {
                 Limpiar filtros
               </Button>
             )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto gap-1.5"
+              disabled={!filteredRequests || filteredRequests.length === 0}
+              onClick={handleExport}
+            >
+              <Download className="size-4" />
+              Exportar ({filteredRequests?.length ?? 0})
+            </Button>
           </div>
         </div>
       )}
