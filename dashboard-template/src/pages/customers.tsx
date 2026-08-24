@@ -264,9 +264,13 @@ function getPeriodRange(period: Exclude<PeriodPreset, "custom">) {
   }
 }
 
+// Excel en español usa la coma como separador decimal, así que al abrir un
+// CSV separado por comas mete todo en una sola columna. Se usa punto y
+// coma como separador de campo, que es lo que Excel en esa configuración
+// regional espera.
 function toCsvValue(value: unknown) {
   const str = String(value ?? "")
-  if (/[",\n]/.test(str)) {
+  if (/[";\n]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`
   }
   return str
@@ -274,7 +278,7 @@ function toCsvValue(value: unknown) {
 
 function downloadCsv(rows: string[][], filename: string) {
   const csvContent =
-    "﻿" + rows.map((row) => row.map(toCsvValue).join(",")).join("\r\n")
+    "﻿" + rows.map((row) => row.map(toCsvValue).join(";")).join("\r\n")
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
