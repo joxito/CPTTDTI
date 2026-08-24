@@ -10,8 +10,10 @@ import {
   PenOff,
   Phone,
   Search,
+  StickyNote,
   Trash2,
   Users,
+  X,
 } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -100,6 +102,15 @@ const SERVICE_FIELD_KEYS = [
 
 type ClientFieldKey = (typeof CLIENT_FIELD_KEYS)[number]
 type ServiceFieldKey = (typeof SERVICE_FIELD_KEYS)[number]
+
+type Note = {
+  id: string
+  created_at: string
+  client_id: string | null
+  service_request_id: string | null
+  author: string
+  body: string
+}
 
 type EditableFields = Pick<Client, ClientFieldKey> & Pick<ServiceRequest, ServiceFieldKey>
 
@@ -214,6 +225,14 @@ export default function CustomersPage() {
   const [requests, setRequests] = useState<ServiceRequest[] | null>(null)
   const [error, setError] = useState("")
   const [query, setQuery] = useState("")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const [clientStatusFilter, setClientStatusFilter] = useState<
+    "all" | "nuevo" | "recurrente"
+  >("all")
+  const [serviceStatusFilter, setServiceStatusFilter] = useState<
+    "all" | "iniciado" | "en_proceso" | "completo"
+  >("all")
   const [selected, setSelected] = useState<ServiceRequest | null>(null)
   const [editing, setEditing] = useState(false)
   const [editValues, setEditValues] = useState<EditableFields | null>(null)
@@ -223,6 +242,68 @@ export default function CustomersPage() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
   const [signLinkCopied, setSignLinkCopied] = useState(false)
+  const [notes, setNotes] = useState<Note[] | null>(null)
+  const [notesError, setNotesError] = useState("")
+  const [newNoteBody, setNewNoteBody] = useState("")
+  const [newNoteScope, setNewNoteScope] = useState<"client" | "service">(
+    "client"
+  )
+  const [addingNote, setAddingNote] = useState(false)
+
+  async function loadNotes(request: ServiceRequest) {
+    setNotes(null)
+    setNotesError("")
+
+    const { data, error } = await supabase
+      .from("notes")
+      .select("id, created_at, client_id, service_request_id, author, body")
+      .or(`client_id.eq.${request.client_id},service_request_id.eq.${request.id}`)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      setNotesError("No pudimos cargar la bitácora.")
+      return
+    }
+
+    setNotes(data)
+  }
+
+  async function handleAddNote() {
+    if (!selected || !newNoteBody.trim()) return
+
+    setAddingNote(true)
+    setNotesError("")
+
+    const { data, error } = await supabase
+      .from("notes")
+      .insert({
+        client_id: newNoteScope === "client" ? selected.client_id : null,
+        service_request_id:
+          newNoteScope === "service" ? selected.id : null,
+        body: newNoteBody.trim(),
+      })
+      .select("id, created_at, client_id, service_request_id, author, body")
+      .single()
+
+    setAddingNote(false)
+
+    if (error || !data) {
+      setNotesError("No pudimos guardar la nota. Intentá de nuevo.")
+      return
+    }
+
+    setNotes((current) => [data, ...(current ?? [])])
+    setNewNoteBody("")
+  }
+
+  async function handleDeleteNote(noteId: string) {
+    const { error } = await supabase.from("notes").delete().eq("id", noteId)
+    if (error) {
+      setNotesError("No pudimos eliminar la nota. Intentá de nuevo.")
+      return
+    }
+    setNotes((current) => current?.filter((note) => note.id !== noteId) ?? current)
+  }
 
   async function handleCopySignLink() {
     if (!selected) return
@@ -260,27 +341,6 @@ export default function CustomersPage() {
     }
   }, [])
 
-  const filteredRequests = useMemo(() => {
-    if (!requests) return requests
-    const normalizedQuery = query.trim().toLocaleLowerCase("es")
-    if (!normalizedQuery) return requests
-
-    return requests.filter((request) =>
-      [
-        request.clients.business_name,
-        request.clients.representative_name,
-        request.clients.email,
-        request.clients.phone,
-        request.clients.province,
-        request.clients.municipality,
-        request.sector,
-      ]
-        .join(" ")
-        .toLocaleLowerCase("es")
-        .includes(normalizedQuery)
-    )
-  }, [requests, query])
-
   // Estado del cliente (Nuevo/Recurrente): se calcula contando cuántos
   // servicios activos tiene cada client_id, no se guarda en la base.
   const clientServiceCounts = useMemo(() => {
@@ -291,12 +351,62 @@ export default function CustomersPage() {
     return counts
   }, [requests])
 
+  const filteredRequests = useMemo(() => {
+    if (!requests) return requests
+
+    const normalizedQuery = query.trim().toLocaleLowerCase("es")
+
+    return requests.filter((request) => {
+      if (normalizedQuery) {
+        const matchesQuery = [
+          request.clients.business_name,
+          request.clients.representative_name,
+          request.clients.email,
+          request.clients.phone,
+          request.clients.province,
+          request.clients.municipality,
+          request.sector,
+        ]
+          .join(" ")
+          .toLocaleLowerCase("es")
+          .includes(normalizedQuery)
+        if (!matchesQuery) return false
+      }
+
+      if (dateFrom && request.created_at.slice(0, 10) < dateFrom) return false
+      if (dateTo && request.created_at.slice(0, 10) > dateTo) return false
+
+      if (clientStatusFilter !== "all") {
+        const isRecurring = (clientServiceCounts.get(request.client_id) ?? 1) > 1
+        if (clientStatusFilter === "recurrente" && !isRecurring) return false
+        if (clientStatusFilter === "nuevo" && isRecurring) return false
+      }
+
+      if (serviceStatusFilter !== "all" && request.status !== serviceStatusFilter) {
+        return false
+      }
+
+      return true
+    })
+  }, [
+    requests,
+    query,
+    dateFrom,
+    dateTo,
+    clientStatusFilter,
+    serviceStatusFilter,
+    clientServiceCounts,
+  ])
+
   function openRequest(request: ServiceRequest) {
     setSelected(request)
     setEditing(false)
     setSaveError("")
     setConfirmingDelete(false)
     setDeleteError("")
+    setNewNoteBody("")
+    setNewNoteScope("client")
+    loadNotes(request)
   }
 
   function closeSheet() {
@@ -306,6 +416,9 @@ export default function CustomersPage() {
     setSaveError("")
     setConfirmingDelete(false)
     setDeleteError("")
+    setNotes(null)
+    setNotesError("")
+    setNewNoteBody("")
   }
 
   async function handleDelete() {
@@ -435,15 +548,103 @@ export default function CustomersPage() {
       </div>
 
       {requests !== null && requests.length > 0 && (
-        <div className="relative max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por negocio, representante, correo..."
-            className="pl-8"
-          />
+        <div className="flex flex-col gap-3">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar por negocio, representante, correo..."
+              className="pl-8"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="filter-date-from" className="text-xs">
+                Desde
+              </Label>
+              <Input
+                id="filter-date-from"
+                type="date"
+                value={dateFrom}
+                onChange={(event) => setDateFrom(event.target.value)}
+                className="w-40"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="filter-date-to" className="text-xs">
+                Hasta
+              </Label>
+              <Input
+                id="filter-date-to"
+                type="date"
+                value={dateTo}
+                onChange={(event) => setDateTo(event.target.value)}
+                className="w-40"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="filter-client-status" className="text-xs">
+                Estado del cliente
+              </Label>
+              <Select
+                id="filter-client-status"
+                value={clientStatusFilter}
+                onChange={(event) =>
+                  setClientStatusFilter(
+                    event.target.value as typeof clientStatusFilter
+                  )
+                }
+                className="w-40"
+              >
+                <option value="all">Todos</option>
+                <option value="nuevo">Nuevo</option>
+                <option value="recurrente">Recurrente</option>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="filter-service-status" className="text-xs">
+                Estado del servicio
+              </Label>
+              <Select
+                id="filter-service-status"
+                value={serviceStatusFilter}
+                onChange={(event) =>
+                  setServiceStatusFilter(
+                    event.target.value as typeof serviceStatusFilter
+                  )
+                }
+                className="w-40"
+              >
+                <option value="all">Todos</option>
+                {serviceStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            {(dateFrom ||
+              dateTo ||
+              clientStatusFilter !== "all" ||
+              serviceStatusFilter !== "all") && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setDateFrom("")
+                  setDateTo("")
+                  setClientStatusFilter("all")
+                  setServiceStatusFilter("all")
+                }}
+              >
+                Limpiar filtros
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -764,6 +965,116 @@ export default function CustomersPage() {
                 <div className="flex h-40 w-full items-center justify-center rounded-lg border border-dashed bg-muted/30 text-xs text-muted-foreground">
                   Sin firma
                 </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2 border-t pt-4">
+              <div className="flex items-center gap-2">
+                <StickyNote className="size-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">Bitácora</span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setNewNoteScope("client")}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                      newNoteScope === "client"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/70"
+                    }`}
+                  >
+                    Sobre el cliente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewNoteScope("service")}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                      newNoteScope === "service"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/70"
+                    }`}
+                  >
+                    Sobre este servicio
+                  </button>
+                </div>
+                <Textarea
+                  value={newNoteBody}
+                  onChange={(event) => setNewNoteBody(event.target.value)}
+                  placeholder="Agregá una nota..."
+                  className="min-h-16"
+                />
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleAddNote}
+                    disabled={addingNote || !newNoteBody.trim()}
+                  >
+                    {addingNote ? "Guardando..." : "Agregar nota"}
+                  </Button>
+                </div>
+              </div>
+
+              {notesError && (
+                <p className="text-sm text-destructive">{notesError}</p>
+              )}
+
+              {notes === null && !notesError && (
+                <p className="text-xs text-muted-foreground">
+                  Cargando bitácora...
+                </p>
+              )}
+
+              {notes !== null && notes.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Todavía no hay notas.
+                </p>
+              )}
+
+              {notes !== null && notes.length > 0 && (
+                <ul className="flex flex-col gap-2">
+                  {notes.map((note) => (
+                    <li
+                      key={note.id}
+                      className="flex flex-col gap-1 rounded-md border bg-muted/30 px-3 py-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            {note.author}
+                          </span>
+                          <span>
+                            ·{" "}
+                            {new Date(note.created_at).toLocaleString(
+                              "es-DO",
+                              {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            )}
+                          </span>
+                          <Badge variant="outline">
+                            {note.client_id ? "Cliente" : "Este servicio"}
+                          </Badge>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteNote(note.id)}
+                          aria-label="Eliminar nota"
+                          className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-destructive"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </div>
+                      <p className="text-sm">{note.body}</p>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           </div>
