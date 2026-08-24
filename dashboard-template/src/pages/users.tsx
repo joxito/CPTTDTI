@@ -48,6 +48,7 @@ export default function UsersPage() {
   const [newName, setNewName] = useState("")
   const [newRole, setNewRole] = useState<Role>("editor")
   const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [passwordCopied, setPasswordCopied] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState("")
@@ -80,12 +81,20 @@ export default function UsersPage() {
   }, [isCreator])
 
   function openAddSheet() {
+    const password = generatePassword()
     setNewEmail("")
     setNewName("")
     setNewRole("editor")
-    setNewPassword(generatePassword())
+    setNewPassword(password)
+    setConfirmPassword(password)
     setCreateError("")
     setAddOpen(true)
+  }
+
+  function handleGeneratePassword() {
+    const password = generatePassword()
+    setNewPassword(password)
+    setConfirmPassword(password)
   }
 
   async function handleCopyPassword() {
@@ -96,6 +105,11 @@ export default function UsersPage() {
 
   async function handleCreateUser() {
     if (!newEmail || !newName || !newPassword) return
+
+    if (newPassword !== confirmPassword) {
+      setCreateError("Las contraseñas no coinciden.")
+      return
+    }
 
     setCreating(true)
     setCreateError("")
@@ -130,10 +144,10 @@ export default function UsersPage() {
   }
 
   async function handleDelete(id: string) {
-    const { error: deleteError } = await supabase
-      .from("staff")
-      .delete()
-      .eq("id", id)
+    const { error: deleteError } = await supabase.functions.invoke(
+      "delete-user",
+      { body: { userId: id } }
+    )
 
     setDeletingId(null)
 
@@ -250,7 +264,13 @@ export default function UsersPage() {
         footer={
           <Button
             onClick={handleCreateUser}
-            disabled={creating || !newEmail || !newName || !newPassword}
+            disabled={
+              creating ||
+              !newEmail ||
+              !newName ||
+              !newPassword ||
+              newPassword !== confirmPassword
+            }
             className="w-full"
           >
             {creating ? "Creando..." : "Crear usuario"}
@@ -303,7 +323,7 @@ export default function UsersPage() {
                 variant="outline"
                 size="icon"
                 aria-label="Generar contraseña"
-                onClick={() => setNewPassword(generatePassword())}
+                onClick={handleGeneratePassword}
               >
                 <RefreshCw className="size-4" />
               </Button>
@@ -320,10 +340,23 @@ export default function UsersPage() {
             {passwordCopied && (
               <p className="text-xs text-muted-foreground">Copiada.</p>
             )}
-            <p className="text-xs text-muted-foreground">
-              Pasásela a la persona por un medio seguro — no queda guardada
-              acá.
-            </p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="new-user-confirm-password">
+              Confirmar contraseña
+            </Label>
+            <Input
+              id="new-user-confirm-password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              className="font-mono"
+            />
+            {confirmPassword && newPassword !== confirmPassword && (
+              <p className="text-xs text-destructive">
+                Las contraseñas no coinciden.
+              </p>
+            )}
           </div>
 
           {createError && (
