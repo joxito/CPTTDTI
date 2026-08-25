@@ -4,6 +4,7 @@ import { AppLayout } from "@/components/layout/app-layout"
 import { RequireAuth } from "@/components/auth/require-auth"
 import DashboardPage from "@/pages/dashboard"
 import CustomersPage from "@/pages/customers"
+import ServicesPage from "@/pages/services"
 import HistoryPage from "@/pages/history"
 import SettingsPage from "@/pages/settings"
 import UsersPage from "@/pages/users"
@@ -19,6 +20,7 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/customers" element={<CustomersPage />} />
+          <Route path="/servicios" element={<ServicesPage />} />
           <Route path="/solicitud-servicios" element={<ServiceRequestPage />} />
           <Route path="/historial" element={<HistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />

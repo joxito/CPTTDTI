@@ -5,6 +5,7 @@ import {
   UserCog,
   Settings,
   ClipboardList,
+  Briefcase,
   History,
   LogOut,
   X,
@@ -19,6 +20,7 @@ import { initialsFromName } from "@/lib/format"
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/customers", label: "Clientes", icon: Users },
+  { to: "/servicios", label: "Servicios", icon: Briefcase },
   {
     to: "/solicitud-servicios",
     label: "Solicitud de Servicios",
