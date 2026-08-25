@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 
-import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -52,9 +52,6 @@ export default function LoginPage() {
           <CardContent className="flex flex-col gap-4 py-8">
             <div className="text-center">
               <CardTitle>Iniciar sesión</CardTitle>
-              <CardDescription className="mt-1">
-                Entrá con tu cuenta del equipo CPTTL.
-              </CardDescription>
             </div>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">

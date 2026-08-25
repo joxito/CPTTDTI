@@ -166,8 +166,8 @@ export default function UsersPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Usuarios</h1>
           <p className="text-sm text-muted-foreground">
             {isCreator
-              ? "Gestioná quién tiene acceso al dashboard."
-              : "Personas con acceso al dashboard."}
+              ? "Gestioná quién tiene acceso al sistema."
+              : "Personas con acceso al sistema."}
           </p>
         </div>
         {isCreator && (
@@ -373,8 +373,8 @@ export default function UsersPage() {
               <h2 className="text-base font-semibold">¿Eliminar usuario?</h2>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Esta acción es irreversible: la persona pierde el acceso al
-              dashboard de inmediato y no se puede deshacer.
+              Esta acción es irreversible: la persona pierde el acceso de
+              inmediato y no se puede deshacer.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDeletingId(null)}>
