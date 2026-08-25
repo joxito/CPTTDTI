@@ -37,6 +37,7 @@ import {
   referralOptions,
   serviceStatusOptions,
 } from "@/data/service-request-options"
+import { regionByProvince, monthNameFromDate, trimesterFromDate } from "@/data/dominican-regions"
 import { useAuth } from "@/hooks/use-auth"
 import { formatCedula, formatPhoneNumber } from "@/lib/format"
 import { supabase } from "@/lib/supabase"
@@ -73,6 +74,7 @@ type ServiceRequest = {
   referral_other: string | null
   signature: string | null
   status: string
+  assigned_advisor_id: string | null
   clients: Client
 }
 
@@ -103,6 +105,7 @@ const SERVICE_FIELD_KEYS = [
   "referral_other",
   "signature",
   "status",
+  "assigned_advisor_id",
 ] as const
 
 type ClientFieldKey = (typeof CLIENT_FIELD_KEYS)[number]
@@ -144,6 +147,7 @@ function toEditableFields(request: ServiceRequest): EditableFields {
     referral_other: request.referral_other,
     signature: request.signature,
     status: request.status,
+    assigned_advisor_id: request.assigned_advisor_id,
   }
 }
 
@@ -169,6 +173,7 @@ function applyEditableFields(
     referral_other: fields.referral_other,
     signature: fields.signature,
     status: fields.status,
+    assigned_advisor_id: fields.assigned_advisor_id,
     clients: {
       ...request.clients,
       business_name: fields.business_name,
@@ -268,10 +273,14 @@ function getPeriodRange(period: Exclude<PeriodPreset, "custom">) {
   }
 }
 
-function downloadXlsx(rows: Record<string, string>[], filename: string) {
+function downloadXlsx(
+  rows: Record<string, unknown>[],
+  filename: string,
+  sheetName = "Servicios"
+) {
   const sheet = XLSX.utils.json_to_sheet(rows)
   const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, sheet, "Servicios")
+  XLSX.utils.book_append_sheet(workbook, sheet, sheetName)
   XLSX.writeFile(workbook, filename)
 }
 
@@ -297,6 +306,10 @@ export default function ServicesPage() {
   const isAdmin = staffProfile?.role === "administrador"
   const [searchParams, setSearchParams] = useSearchParams()
   const [requests, setRequests] = useState<ServiceRequest[] | null>(null)
+  const [staffOptions, setStaffOptions] = useState<{ id: string; name: string }[]>(
+    []
+  )
+  const [exportChoiceOpen, setExportChoiceOpen] = useState(false)
   const [error, setError] = useState("")
   const [query, setQuery] = useState("")
   const [dateFrom, setDateFrom] = useState("")
@@ -382,44 +395,89 @@ export default function ServicesPage() {
     setNotes((current) => current?.filter((note) => note.id !== noteId) ?? current)
   }
 
-  function handleExport() {
+  // Columnas y valores calcados de la plantilla oficial "Matriz de
+  // Asistencias Técnicas" (Viceministerio de Fomento a las Mipymes) para
+  // que se pueda pegar directo ahí sin ajustes.
+  function handleExportMipymesAsistidas() {
     if (!filteredRequests || filteredRequests.length === 0) return
 
     const rows = filteredRequests.map((request) => {
       const client = request.clients
       const isRecurring =
         (clientServiceCounts.get(request.client_id) ?? 1) > 1
-      const sector =
-        request.sector === "Otro" ? request.sector_other ?? "" : request.sector
-      const referral =
-        request.referral === "Otro"
-          ? request.referral_other ?? ""
-          : request.referral
+      const advisor = staffOptions.find(
+        (option) => option.id === request.assigned_advisor_id
+      )
 
       return {
-        Negocio: client.business_name,
-        Representante: client.representative_name,
-        Cédula: client.id_number,
-        RNC: client.rnc_number ?? "",
+        Año: new Date(request.created_at).getFullYear(),
+        Mes: monthNameFromDate(request.created_at),
+        Trimestre: trimesterFromDate(request.created_at),
+        "Nombre de la Mipyme asistida": client.business_name,
+        "RNC/Cédula": client.rnc_number || client.id_number,
+        "Provincia  donde está ubicada la Mipyme": client.province,
+        "Municipio  donde está ubicada la Mipyme": client.municipality,
+        "Región donde está ubicada la Mipyme":
+          regionByProvince[client.province] ?? "",
+        "Nombre del representante de la empresa o persona que solicita el servicio":
+          client.representative_name,
+        Género: client.sex === "femenino" ? "Femenino" : "Masculino",
+        Edad: client.age,
         Teléfono: client.phone,
-        Correo: client.email,
-        Provincia: client.province,
-        Municipio: client.municipality,
-        Dirección: client.address ?? "",
-        Sector: sector,
-        Descripción: request.business_description,
-        "Servicios solicitados": request.services.join("; "),
-        "Estado del cliente": isRecurring ? "Recurrente" : "Nuevo",
-        "Estado del servicio": serviceStatusLabel(request.status),
-        "Cómo se enteró": referral,
-        Firmado: request.signature ? "Sí" : "No",
-        "Fecha de solicitud": request.created_at.slice(0, 10),
+        "¿Es dueño de la empresa?":
+          client.is_owner === "si"
+            ? "Dueño o accionista"
+            : "Gerente o representante",
+        "Persona de contacto": client.representative_name,
+        "Teléfono del contacto": client.phone,
+        "Correo electrónico": client.email,
+        "División/Centro": "LOYOLA y CPTT",
+        "Asesor encargado": advisor?.name ?? "",
+        "Empleos generados": "",
+        "Aumento en ventas (Si aplica)": "",
+        "Tipo de Clientes": isRecurring ? "Cliente Viejo" : "Cliente Nuevo",
+        Observaciones: "",
       }
     })
 
     const from = dateFrom || "todas"
     const to = dateTo || "todas"
-    downloadXlsx(rows, `servicios_${from}_a_${to}.xlsx`)
+    downloadXlsx(
+      rows,
+      `mipymes_asistidas_${from}_a_${to}.xlsx`,
+      "Mipymes Asistidas"
+    )
+  }
+
+  function handleExportActividadEconomica() {
+    if (!filteredRequests || filteredRequests.length === 0) return
+
+    const rows = filteredRequests.map((request) => {
+      const client = request.clients
+      const sector =
+        request.sector === "Otro" ? request.sector_other ?? "" : request.sector
+
+      return {
+        "Nombre de la Mipyme asistida": client.business_name,
+        "RNC/Cédula": client.rnc_number || client.id_number,
+        "Actividad Económica": sector,
+        Productos: "",
+      }
+    })
+
+    const from = dateFrom || "todas"
+    const to = dateTo || "todas"
+    downloadXlsx(
+      rows,
+      `actividad_economica_${from}_a_${to}.xlsx`,
+      "Actividad Económica"
+    )
+  }
+
+  function handleExportChoice(format: "mipymes" | "actividad") {
+    setExportChoiceOpen(false)
+    if (format === "mipymes") handleExportMipymesAsistidas()
+    else handleExportActividadEconomica()
   }
 
   async function handleCopySignLink() {
@@ -437,7 +495,7 @@ export default function ServicesPage() {
       const { data, error } = await supabase
         .from("service_requests")
         .select(
-          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, signature, status, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address, id_photo_paths)"
+          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, signature, status, assigned_advisor_id, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address, id_photo_paths)"
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -456,6 +514,14 @@ export default function ServicesPage() {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    supabase
+      .from("staff")
+      .select("id, name")
+      .order("name", { ascending: true })
+      .then(({ data }) => setStaffOptions(data ?? []))
   }, [])
 
   async function loadIdPhotoUrls(paths: string[] | null) {
@@ -836,7 +902,7 @@ export default function ServicesPage() {
                 size="sm"
                 className="ml-auto gap-1.5"
                 disabled={!filteredRequests || filteredRequests.length === 0}
-                onClick={handleExport}
+                onClick={() => setExportChoiceOpen(true)}
               >
                 <Download className="size-4" />
                 Exportar ({filteredRequests?.length ?? 0})
@@ -1054,6 +1120,14 @@ export default function ServicesPage() {
                 {serviceStatusLabel(selected.status)}
               </Badge>
             </div>
+            <DetailRow
+              label="Asesor encargado"
+              value={
+                staffOptions.find(
+                  (option) => option.id === selected.assigned_advisor_id
+                )?.name ?? "Sin asignar"
+              }
+            />
             <DetailRow
               label="Nombre del Negocio o Emprendimiento"
               value={selected.clients.business_name}
@@ -1326,6 +1400,27 @@ export default function ServicesPage() {
                 {serviceStatusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-advisor">Asesor encargado</Label>
+              <Select
+                id="edit-advisor"
+                value={editValues.assigned_advisor_id ?? ""}
+                onChange={(event) =>
+                  updateEditValue(
+                    "assigned_advisor_id",
+                    event.target.value || null
+                  )
+                }
+              >
+                <option value="">Sin asignar</option>
+                {staffOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
                   </option>
                 ))}
               </Select>
@@ -1633,6 +1728,44 @@ export default function ServicesPage() {
           </div>
         )}
       </Sheet>
+
+      {exportChoiceOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg">
+            <h2 className="text-base font-semibold">Elegí el formato</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Respeta los filtros que están aplicados en pantalla.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start"
+                onClick={() => handleExportChoice("mipymes")}
+              >
+                Mipymes Asistidas
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start"
+                onClick={() => handleExportChoice("actividad")}
+              >
+                Actividad Económica
+              </Button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setExportChoiceOpen(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
