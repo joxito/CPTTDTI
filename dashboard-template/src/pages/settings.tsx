@@ -1,21 +1,24 @@
 import { useRef, useState } from "react"
+import { Pencil } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PhotoCropModal } from "@/components/ui/photo-crop-modal"
 import { useAuth } from "@/hooks/use-auth"
 import { initialsFromName } from "@/lib/format"
-import { resizePhoto } from "@/lib/image"
 import { supabase } from "@/lib/supabase"
-import { cn } from "@/lib/utils"
 
 export default function SettingsPage() {
   const { session, staffProfile, refreshStaffProfile } = useAuth()
   const photoInputRef = useRef<HTMLInputElement>(null)
 
+  const [editingProfile, setEditingProfile] = useState(false)
   const [name, setName] = useState(staffProfile?.name ?? "")
+  const [photo, setPhoto] = useState(staffProfile?.photo ?? null)
+  const [cropFile, setCropFile] = useState<File | null>(null)
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileMessage, setProfileMessage] = useState("")
   const [profileError, setProfileError] = useState("")
@@ -27,29 +30,26 @@ export default function SettingsPage() {
   const [passwordMessage, setPasswordMessage] = useState("")
   const [passwordError, setPasswordError] = useState("")
 
-  async function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file || !session) return
-
-    const photo = await resizePhoto(file)
+  function startEditingProfile() {
+    setName(staffProfile?.name ?? "")
+    setPhoto(staffProfile?.photo ?? null)
     setProfileError("")
-
-    const { error } = await supabase
-      .from("staff")
-      .update({ photo })
-      .eq("id", session.user.id)
-
-    if (error) {
-      setProfileError("No pudimos guardar la foto.")
-      return
-    }
-
-    await refreshStaffProfile()
-    setProfileMessage("Foto actualizada.")
-    setTimeout(() => setProfileMessage(""), 2000)
+    setProfileMessage("")
+    setEditingProfile(true)
   }
 
-  async function handleSaveName() {
+  function cancelEditingProfile() {
+    setEditingProfile(false)
+    setProfileError("")
+  }
+
+  function handlePhotoPick(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (file) setCropFile(file)
+    event.target.value = ""
+  }
+
+  async function handleSaveProfile() {
     if (!session || !name.trim()) return
 
     setSavingProfile(true)
@@ -58,18 +58,19 @@ export default function SettingsPage() {
 
     const { error } = await supabase
       .from("staff")
-      .update({ name: name.trim() })
+      .update({ name: name.trim(), photo })
       .eq("id", session.user.id)
 
     setSavingProfile(false)
 
     if (error) {
-      setProfileError("No pudimos guardar el nombre.")
+      setProfileError("No pudimos guardar los cambios.")
       return
     }
 
     await refreshStaffProfile()
-    setProfileMessage("Nombre actualizado.")
+    setEditingProfile(false)
+    setProfileMessage("Perfil actualizado.")
     setTimeout(() => setProfileMessage(""), 2000)
   }
 
@@ -117,6 +118,9 @@ export default function SettingsPage() {
     setTimeout(() => setPasswordMessage(""), 2000)
   }
 
+  const displayedPhoto = editingProfile ? photo : staffProfile?.photo
+  const displayedName = editingProfile ? name : staffProfile?.name
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <div>
@@ -124,41 +128,57 @@ export default function SettingsPage() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between">
           <CardTitle>Perfil</CardTitle>
+          {!editingProfile && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Editar perfil"
+              onClick={startEditingProfile}
+            >
+              <Pencil className="size-4" />
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="flex flex-col gap-4 pb-6">
           <div className="flex items-center gap-4">
-            <Avatar className="size-16">
-              {staffProfile?.photo && <AvatarImage src={staffProfile.photo} />}
+            <Avatar
+              className={editingProfile ? "size-16 cursor-pointer" : "size-16"}
+              onClick={
+                editingProfile ? () => photoInputRef.current?.click() : undefined
+              }
+            >
+              {displayedPhoto && <AvatarImage src={displayedPhoto} />}
               <AvatarFallback className="text-base">
-                {initialsFromName(staffProfile?.name)}
+                {initialsFromName(displayedName)}
               </AvatarFallback>
             </Avatar>
-            <label
-              htmlFor="profile-photo"
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-            >
-              Cambiar foto
-            </label>
-            <input
-              ref={photoInputRef}
-              id="profile-photo"
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              onChange={handlePhotoChange}
-            />
+            {!editingProfile && (
+              <span className="text-sm font-medium">{displayedName}</span>
+            )}
+            {editingProfile && (
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={handlePhotoPick}
+              />
+            )}
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="profile-name">Nombre</Label>
-            <Input
-              id="profile-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
+          {editingProfile && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="profile-name">Nombre</Label>
+              <Input
+                id="profile-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </div>
+          )}
 
           {profileError && (
             <p className="text-sm text-destructive">{profileError}</p>
@@ -167,13 +187,24 @@ export default function SettingsPage() {
             <p className="text-sm text-success">{profileMessage}</p>
           )}
 
-          <Button
-            onClick={handleSaveName}
-            disabled={savingProfile || !name.trim()}
-            className="self-start"
-          >
-            {savingProfile ? "Guardando..." : "Guardar"}
-          </Button>
+          {editingProfile && (
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSaveProfile}
+                disabled={savingProfile || !name.trim()}
+              >
+                {savingProfile ? "Guardando..." : "Guardar cambios"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={cancelEditingProfile}
+                disabled={savingProfile}
+              >
+                Cancelar
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -233,6 +264,17 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {cropFile && (
+        <PhotoCropModal
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onSelect={(dataUrl) => {
+            setPhoto(dataUrl)
+            setCropFile(null)
+          }}
+        />
+      )}
     </div>
   )
 }

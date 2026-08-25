@@ -197,10 +197,12 @@ create policy "Staff autenticado puede ver el staff"
   to authenticated
   using (true);
 
-create policy "Solo la cuenta creadora agrega usuarios"
+create policy "Un administrador agrega usuarios"
   on staff for insert
   to authenticated
-  with check ((auth.jwt() ->> 'email') = 'cptt@ipl.edu.do');
+  with check (
+    (select role from staff where id = auth.uid()) = 'administrador'
+  );
 
 create policy "Creador edita cualquiera, cada quien su propio perfil"
   on staff for update

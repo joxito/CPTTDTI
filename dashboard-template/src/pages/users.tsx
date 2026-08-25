@@ -53,7 +53,8 @@ function generatePassword() {
 }
 
 export default function UsersPage() {
-  const { isCreator } = useAuth()
+  const { isCreator, staffProfile } = useAuth()
+  const isAdmin = staffProfile?.role === "administrador"
   const [staff, setStaff] = useState<StaffRow[] | null>(null)
   const [error, setError] = useState("")
 
@@ -86,15 +87,10 @@ export default function UsersPage() {
 
   async function loadStaff() {
     setError("")
-    const { data, error: loadError } = isCreator
-      ? await supabase
-          .from("staff")
-          .select("id, name, role, photo, email")
-          .order("created_at", { ascending: true })
-      : await supabase
-          .from("staff_directory")
-          .select("id, name, role, photo")
-          .order("name", { ascending: true })
+    const { data, error: loadError } = await supabase
+      .from("staff")
+      .select("id, name, role, photo, email")
+      .order("created_at", { ascending: true })
 
     if (loadError) {
       setError("No pudimos cargar los usuarios.")
@@ -273,12 +269,12 @@ export default function UsersPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Usuarios</h1>
           <p className="text-sm text-muted-foreground">
-            {isCreator
+            {isAdmin
               ? "Gestiona quién tiene acceso al sistema."
               : "Personas con acceso al sistema."}
           </p>
         </div>
-        {isCreator && (
+        {isAdmin && (
           <Button onClick={openAddSheet} className="gap-1.5">
             <Plus className="size-4" />
             Agregar usuario
@@ -297,7 +293,7 @@ export default function UsersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Usuario</TableHead>
-              {isCreator && <TableHead>Correo</TableHead>}
+              <TableHead>Correo</TableHead>
               <TableHead>Rol</TableHead>
               {isCreator && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
@@ -323,11 +319,9 @@ export default function UsersPage() {
                       <span className="font-medium">{row.name}</span>
                     </div>
                   </TableCell>
-                  {isCreator && (
-                    <TableCell className="text-muted-foreground">
-                      {row.email}
-                    </TableCell>
-                  )}
+                  <TableCell className="text-muted-foreground">
+                    {row.email}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="capitalize">
                       {row.role}
@@ -497,6 +491,13 @@ export default function UsersPage() {
                   className="sr-only"
                   onChange={handleEditPhotoChange}
                 />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label>Correo</Label>
+                <p className="text-sm text-muted-foreground">
+                  {editingUser.email}
+                </p>
               </div>
 
               <div className="flex flex-col gap-1.5">

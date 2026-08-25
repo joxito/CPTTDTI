@@ -1,10 +1,8 @@
 // Edge Function: crea un usuario nuevo (login + fila en staff) de una sola
 // vez. Requiere la service role key, así que corre acá, nunca en el
-// navegador. Solo la cuenta creadora (cptt@ipl.edu.do) puede llamarla —
-// se valida abajo con el JWT de quien llama, no solo confiando en la UI.
+// navegador. Cualquier cuenta con rol administrador puede llamarla —
+// se valida abajo contra la tabla staff, no solo confiando en la UI.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
-
-const CREATOR_EMAIL = "cptt@ipl.edu.do"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,9 +30,28 @@ Deno.serve(async (req) => {
       data: { user: caller },
     } = await callerClient.auth.getUser()
 
-    if (!caller || caller.email !== CREATOR_EMAIL) {
+    if (!caller) {
       return new Response(
-        JSON.stringify({ error: "Solo la cuenta creadora puede agregar usuarios." }),
+        JSON.stringify({ error: "Sesión inválida." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      )
+    }
+
+    // Cliente con permisos completos, solo para esta operación puntual.
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    )
+
+    const { data: callerStaff } = await adminClient
+      .from("staff")
+      .select("role")
+      .eq("id", caller.id)
+      .single()
+
+    if (callerStaff?.role !== "administrador") {
+      return new Response(
+        JSON.stringify({ error: "Solo un administrador puede agregar usuarios." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     }
@@ -47,12 +64,6 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     }
-
-    // Cliente con permisos completos, solo para esta operación puntual.
-    const adminClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    )
 
     const { data: created, error: createError } =
       await adminClient.auth.admin.createUser({
