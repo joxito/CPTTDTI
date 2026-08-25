@@ -38,7 +38,7 @@ import {
   serviceStatusOptions,
 } from "@/data/service-request-options"
 import { regionByProvince, monthNameFromDate, trimesterFromDate } from "@/data/dominican-regions"
-import { useAuth } from "@/hooks/use-auth"
+import { CREATOR_EMAIL, useAuth } from "@/hooks/use-auth"
 import { formatCedula, formatPhoneNumber } from "@/lib/format"
 import { supabase } from "@/lib/supabase"
 
@@ -306,9 +306,9 @@ export default function ServicesPage() {
   const isAdmin = staffProfile?.role === "administrador"
   const [searchParams, setSearchParams] = useSearchParams()
   const [requests, setRequests] = useState<ServiceRequest[] | null>(null)
-  const [staffOptions, setStaffOptions] = useState<{ id: string; name: string }[]>(
-    []
-  )
+  const [staffOptions, setStaffOptions] = useState<
+    { id: string; name: string; email: string }[]
+  >([])
   const [exportChoiceOpen, setExportChoiceOpen] = useState(false)
   const [error, setError] = useState("")
   const [query, setQuery] = useState("")
@@ -519,9 +519,13 @@ export default function ServicesPage() {
   useEffect(() => {
     supabase
       .from("staff")
-      .select("id, name")
+      .select("id, name, email")
       .order("name", { ascending: true })
-      .then(({ data }) => setStaffOptions(data ?? []))
+      .then(({ data }) =>
+        setStaffOptions(
+          (data ?? []).filter((option) => option.email !== CREATOR_EMAIL)
+        )
+      )
   }, [])
 
   async function loadIdPhotoUrls(paths: string[] | null) {
