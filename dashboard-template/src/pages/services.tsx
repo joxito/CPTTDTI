@@ -320,6 +320,7 @@ export default function ServicesPage() {
   const [serviceStatusFilter, setServiceStatusFilter] = useState<
     "all" | "iniciado" | "en_proceso" | "completo"
   >("all")
+  const [advisorFilter, setAdvisorFilter] = useState("all")
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("custom")
   const [selected, setSelected] = useState<ServiceRequest | null>(null)
   const [editing, setEditing] = useState(false)
@@ -621,6 +622,14 @@ export default function ServicesPage() {
         return false
       }
 
+      if (advisorFilter !== "all") {
+        if (advisorFilter === "unassigned") {
+          if (request.assigned_advisor_id) return false
+        } else if (request.assigned_advisor_id !== advisorFilter) {
+          return false
+        }
+      }
+
       return true
     })
   }, [
@@ -630,6 +639,7 @@ export default function ServicesPage() {
     dateTo,
     clientStatusFilter,
     serviceStatusFilter,
+    advisorFilter,
     clientServiceCounts,
   ])
 
@@ -880,10 +890,30 @@ export default function ServicesPage() {
                 ))}
               </Select>
             </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="filter-advisor" className="text-xs">
+                Asesor encargado
+              </Label>
+              <Select
+                id="filter-advisor"
+                value={advisorFilter}
+                onChange={(event) => setAdvisorFilter(event.target.value)}
+                className="w-40"
+              >
+                <option value="all">Todos</option>
+                <option value="unassigned">Sin asignar</option>
+                {staffOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
             {(dateFrom ||
               dateTo ||
               clientStatusFilter !== "all" ||
-              serviceStatusFilter !== "all") && (
+              serviceStatusFilter !== "all" ||
+              advisorFilter !== "all") && (
               <Button
                 type="button"
                 variant="ghost"
@@ -894,6 +924,7 @@ export default function ServicesPage() {
                   setPeriodPreset("custom")
                   setClientStatusFilter("all")
                   setServiceStatusFilter("all")
+                  setAdvisorFilter("all")
                 }}
               >
                 Limpiar filtros
