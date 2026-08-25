@@ -3,7 +3,7 @@ import { Copy, Plus, RefreshCw, Trash2, UserCog } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
@@ -18,7 +18,9 @@ import {
 } from "@/components/ui/table"
 import { CREATOR_EMAIL, useAuth } from "@/hooks/use-auth"
 import { initialsFromName } from "@/lib/format"
+import { resizePhoto } from "@/lib/image"
 import { supabase } from "@/lib/supabase"
+import { cn } from "@/lib/utils"
 
 type Role = "administrador" | "editor"
 
@@ -66,6 +68,21 @@ export default function UsersPage() {
   const [createError, setCreateError] = useState("")
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const [editingUser, setEditingUser] = useState<StaffRow | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editRole, setEditRole] = useState<Role>("editor")
+  const [editPhoto, setEditPhoto] = useState<string | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError] = useState("")
+  const [editMessage, setEditMessage] = useState("")
+
+  const [resetPassword, setResetPassword] = useState("")
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("")
+  const [resetPasswordCopied, setResetPasswordCopied] = useState(false)
+  const [resettingPassword, setResettingPassword] = useState(false)
+  const [resetError, setResetError] = useState("")
+  const [resetMessage, setResetMessage] = useState("")
 
   async function loadStaff() {
     setError("")
@@ -144,16 +161,94 @@ export default function UsersPage() {
     loadStaff()
   }
 
-  async function handleRoleChange(id: string, role: Role) {
-    setStaff((current) =>
-      current?.map((row) => (row.id === id ? { ...row, role } : row)) ?? current
-    )
+  function openEditSheet(row: StaffRow) {
+    setEditingUser(row)
+    setEditName(row.name)
+    setEditRole(row.role)
+    setEditPhoto(row.photo)
+    setEditError("")
+    setEditMessage("")
+    setResetPassword(generatePassword())
+    setResetConfirmPassword("")
+    setResetError("")
+    setResetMessage("")
+  }
+
+  function closeEditSheet() {
+    setEditingUser(null)
+  }
+
+  async function handleEditPhotoChange(
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const photo = await resizePhoto(file)
+    setEditPhoto(photo)
+  }
+
+  async function handleSaveEdit() {
+    if (!editingUser || !editName.trim()) return
+
+    setSavingEdit(true)
+    setEditError("")
+    setEditMessage("")
+
     const { error: updateError } = await supabase
       .from("staff")
-      .update({ role })
-      .eq("id", id)
+      .update({ name: editName.trim(), role: editRole, photo: editPhoto })
+      .eq("id", editingUser.id)
 
-    if (updateError) loadStaff()
+    setSavingEdit(false)
+
+    if (updateError) {
+      setEditError("No pudimos guardar los cambios.")
+      return
+    }
+
+    setStaff((current) =>
+      current?.map((row) =>
+        row.id === editingUser.id
+          ? { ...row, name: editName.trim(), role: editRole, photo: editPhoto }
+          : row
+      ) ?? current
+    )
+    setEditMessage("Cambios guardados.")
+    setTimeout(() => setEditMessage(""), 2000)
+  }
+
+  async function handleCopyResetPassword() {
+    await navigator.clipboard.writeText(resetPassword)
+    setResetPasswordCopied(true)
+    setTimeout(() => setResetPasswordCopied(false), 2000)
+  }
+
+  async function handleResetPassword() {
+    if (!editingUser || !resetPassword) return
+
+    if (resetPassword !== resetConfirmPassword) {
+      setResetError("Las contraseñas no coinciden.")
+      return
+    }
+
+    setResettingPassword(true)
+    setResetError("")
+    setResetMessage("")
+
+    const { error: fnError } = await supabase.functions.invoke(
+      "reset-password",
+      { body: { userId: editingUser.id, password: resetPassword } }
+    )
+
+    setResettingPassword(false)
+
+    if (fnError) {
+      const detail = await extractFunctionErrorMessage(fnError)
+      setResetError(detail ?? "No pudimos restablecer la contraseña.")
+      return
+    }
+
+    setResetMessage("Contraseña restablecida.")
   }
 
   async function handleDelete(id: string) {
@@ -210,8 +305,13 @@ export default function UsersPage() {
           <TableBody>
             {staff.map((row) => {
               const isProtected = row.email === CREATOR_EMAIL
+              const canEdit = isCreator && !isProtected
               return (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  onClick={canEdit ? () => openEditSheet(row) : undefined}
+                  className={canEdit ? "cursor-pointer" : undefined}
+                >
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar>
@@ -229,22 +329,9 @@ export default function UsersPage() {
                     </TableCell>
                   )}
                   <TableCell>
-                    {isCreator && !isProtected ? (
-                      <Select
-                        value={row.role}
-                        onChange={(event) =>
-                          handleRoleChange(row.id, event.target.value as Role)
-                        }
-                        className="w-40"
-                      >
-                        <option value="administrador">Administrador</option>
-                        <option value="editor">Editor</option>
-                      </Select>
-                    ) : (
-                      <Badge variant="secondary" className="capitalize">
-                        {row.role}
-                      </Badge>
-                    )}
+                    <Badge variant="secondary" className="capitalize">
+                      {row.role}
+                    </Badge>
                   </TableCell>
                   {isCreator && (
                     <TableCell className="text-right">
@@ -255,7 +342,10 @@ export default function UsersPage() {
                           size="icon"
                           className="text-destructive hover:text-destructive"
                           aria-label="Eliminar usuario"
-                          onClick={() => setDeletingId(row.id)}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setDeletingId(row.id)
+                          }}
                         >
                           <Trash2 className="size-4" />
                         </Button>
@@ -376,6 +466,156 @@ export default function UsersPage() {
             <p className="text-sm text-destructive">{createError}</p>
           )}
         </div>
+      </Sheet>
+
+      <Sheet
+        open={editingUser !== null}
+        onClose={closeEditSheet}
+        title={editingUser?.name}
+        description={editingUser?.email}
+      >
+        {editingUser && (
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-4">
+                <Avatar className="size-16">
+                  {editPhoto && <AvatarImage src={editPhoto} />}
+                  <AvatarFallback className="text-base">
+                    {initialsFromName(editName)}
+                  </AvatarFallback>
+                </Avatar>
+                <label
+                  htmlFor="edit-user-photo"
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                >
+                  Cambiar foto
+                </label>
+                <input
+                  id="edit-user-photo"
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={handleEditPhotoChange}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-user-name">Nombre</Label>
+                <Input
+                  id="edit-user-name"
+                  value={editName}
+                  onChange={(event) => setEditName(event.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-user-role">Rol</Label>
+                <Select
+                  id="edit-user-role"
+                  value={editRole}
+                  onChange={(event) => setEditRole(event.target.value as Role)}
+                >
+                  <option value="administrador">Administrador</option>
+                  <option value="editor">Editor</option>
+                </Select>
+              </div>
+
+              {editError && (
+                <p className="text-sm text-destructive">{editError}</p>
+              )}
+              {editMessage && (
+                <p className="text-sm text-success">{editMessage}</p>
+              )}
+
+              <Button
+                onClick={handleSaveEdit}
+                disabled={savingEdit || !editName.trim()}
+                className="self-start"
+              >
+                {savingEdit ? "Guardando..." : "Guardar"}
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-4 border-t pt-4">
+              <span className="text-sm font-semibold">
+                Restablecer contraseña
+              </span>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="reset-password">Nueva contraseña</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="reset-password"
+                    value={resetPassword}
+                    onChange={(event) => setResetPassword(event.target.value)}
+                    className="font-mono"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Generar contraseña"
+                    onClick={() => setResetPassword(generatePassword())}
+                  >
+                    <RefreshCw className="size-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Copiar contraseña"
+                    onClick={handleCopyResetPassword}
+                  >
+                    <Copy className="size-4" />
+                  </Button>
+                </div>
+                {resetPasswordCopied && (
+                  <p className="text-xs text-muted-foreground">Copiada.</p>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="reset-confirm-password">
+                  Confirmar contraseña
+                </Label>
+                <Input
+                  id="reset-confirm-password"
+                  value={resetConfirmPassword}
+                  onChange={(event) =>
+                    setResetConfirmPassword(event.target.value)
+                  }
+                  className="font-mono"
+                />
+                {resetConfirmPassword &&
+                  resetPassword !== resetConfirmPassword && (
+                    <p className="text-xs text-destructive">
+                      Las contraseñas no coinciden.
+                    </p>
+                  )}
+              </div>
+
+              {resetError && (
+                <p className="text-sm text-destructive">{resetError}</p>
+              )}
+              {resetMessage && (
+                <p className="text-sm text-success">{resetMessage}</p>
+              )}
+
+              <Button
+                variant="outline"
+                onClick={handleResetPassword}
+                disabled={
+                  resettingPassword ||
+                  !resetPassword ||
+                  resetPassword !== resetConfirmPassword
+                }
+                className="self-start"
+              >
+                {resettingPassword ? "Restableciendo..." : "Restablecer contraseña"}
+              </Button>
+            </div>
+          </div>
+        )}
       </Sheet>
 
       {deletingId && (
