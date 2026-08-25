@@ -816,6 +816,27 @@ export default function ServicesPage() {
                 {option.label}
               </Button>
             ))}
+            {(dateFrom ||
+              dateTo ||
+              clientStatusFilter !== "all" ||
+              serviceStatusFilter !== "all" ||
+              advisorFilter !== "all") && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setDateFrom("")
+                  setDateTo("")
+                  setPeriodPreset("custom")
+                  setClientStatusFilter("all")
+                  setServiceStatusFilter("all")
+                  setAdvisorFilter("all")
+                }}
+              >
+                Limpiar filtros
+              </Button>
+            )}
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
@@ -909,27 +930,6 @@ export default function ServicesPage() {
                 ))}
               </Select>
             </div>
-            {(dateFrom ||
-              dateTo ||
-              clientStatusFilter !== "all" ||
-              serviceStatusFilter !== "all" ||
-              advisorFilter !== "all") && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setDateFrom("")
-                  setDateTo("")
-                  setPeriodPreset("custom")
-                  setClientStatusFilter("all")
-                  setServiceStatusFilter("all")
-                  setAdvisorFilter("all")
-                }}
-              >
-                Limpiar filtros
-              </Button>
-            )}
             {isAdmin && (
               <Button
                 type="button"
