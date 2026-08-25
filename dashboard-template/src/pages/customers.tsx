@@ -67,6 +67,8 @@ type Note = {
   body: string
 }
 
+const PAGE_SIZE = 15
+
 function formatDate(isoDate: string) {
   return new Date(isoDate).toLocaleDateString("es-DO", {
     day: "2-digit",
@@ -113,6 +115,7 @@ export default function CustomersPage() {
   >(null)
   const [error, setError] = useState("")
   const [query, setQuery] = useState("")
+  const [page, setPage] = useState(1)
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [notesError, setNotesError] = useState("")
@@ -182,6 +185,13 @@ export default function CustomersPage() {
         .includes(normalizedQuery)
     )
   }, [clientGroups, query])
+
+  const totalPages = Math.max(1, Math.ceil(filteredGroups.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const paginatedGroups = filteredGroups.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  )
 
   const selectedGroup = selectedClientId
     ? clientGroups.get(selectedClientId) ?? null
@@ -291,7 +301,10 @@ export default function CustomersPage() {
           <Input
             type="search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value)
+              setPage(1)
+            }}
             placeholder="Buscar por negocio, representante, correo..."
             className="pl-8"
           />
@@ -326,7 +339,7 @@ export default function CustomersPage() {
 
       {filteredGroups.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredGroups.map((group) => {
+          {paginatedGroups.map((group) => {
             const hasUnsigned = group.services.some(
               (service) => !service.signature
             )
@@ -398,6 +411,37 @@ export default function CustomersPage() {
               </Card>
             )
           })}
+        </div>
+      )}
+
+      {filteredGroups.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Página {currentPage} de {totalPages} — {filteredGroups.length}{" "}
+            clientes
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={currentPage === 1}
+            >
+              Anterior
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setPage((current) => Math.min(totalPages, current + 1))
+              }
+              disabled={currentPage === totalPages}
+            >
+              Siguiente
+            </Button>
+          </div>
         </div>
       )}
 
