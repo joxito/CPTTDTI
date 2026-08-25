@@ -86,15 +86,10 @@ export default function UsersPage() {
 
   async function loadStaff() {
     setError("")
-    const { data, error: loadError } = isCreator
-      ? await supabase
-          .from("staff")
-          .select("id, name, role, photo, email")
-          .order("created_at", { ascending: true })
-      : await supabase
-          .from("staff_directory")
-          .select("id, name, role, photo")
-          .order("name", { ascending: true })
+    const { data, error: loadError } = await supabase
+      .from("staff")
+      .select("id, name, role, photo, email")
+      .order("created_at", { ascending: true })
 
     if (loadError) {
       setError("No pudimos cargar los usuarios.")
@@ -297,7 +292,7 @@ export default function UsersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Usuario</TableHead>
-              {isCreator && <TableHead>Correo</TableHead>}
+              <TableHead>Correo</TableHead>
               <TableHead>Rol</TableHead>
               {isCreator && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
@@ -323,11 +318,9 @@ export default function UsersPage() {
                       <span className="font-medium">{row.name}</span>
                     </div>
                   </TableCell>
-                  {isCreator && (
-                    <TableCell className="text-muted-foreground">
-                      {row.email}
-                    </TableCell>
-                  )}
+                  <TableCell className="text-muted-foreground">
+                    {row.email}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="capitalize">
                       {row.role}
