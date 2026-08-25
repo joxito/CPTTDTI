@@ -56,6 +56,7 @@ type Client = {
   id_number: string
   email: string
   address: string | null
+  id_photo_paths: string[] | null
 }
 
 type ServiceRequest = {
@@ -316,6 +317,7 @@ export default function ServicesPage() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
   const [signLinkCopied, setSignLinkCopied] = useState(false)
+  const [idPhotoUrls, setIdPhotoUrls] = useState<string[] | null>(null)
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [notesError, setNotesError] = useState("")
   const [newNoteBody, setNewNoteBody] = useState("")
@@ -435,7 +437,7 @@ export default function ServicesPage() {
       const { data, error } = await supabase
         .from("service_requests")
         .select(
-          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, signature, status, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address)"
+          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, signature, status, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address, id_photo_paths)"
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -456,6 +458,29 @@ export default function ServicesPage() {
     }
   }, [])
 
+  async function loadIdPhotoUrls(paths: string[] | null) {
+    setIdPhotoUrls(null)
+    if (!paths || paths.length === 0) {
+      setIdPhotoUrls([])
+      return
+    }
+
+    const { data, error } = await supabase.storage
+      .from("cedulas")
+      .createSignedUrls(paths, 300)
+
+    if (error) {
+      setIdPhotoUrls([])
+      return
+    }
+
+    setIdPhotoUrls(
+      data
+        .map((item) => item.signedUrl)
+        .filter((url): url is string => Boolean(url))
+    )
+  }
+
   function openRequest(request: ServiceRequest) {
     setSelected(request)
     setEditing(false)
@@ -465,6 +490,7 @@ export default function ServicesPage() {
     setNewNoteBody("")
     setNewNoteScope("client")
     loadNotes(request)
+    loadIdPhotoUrls(request.clients.id_photo_paths)
   }
 
   // Deep link desde Clientes: /servicios?id=<serviceRequestId> abre ese
@@ -547,6 +573,7 @@ export default function ServicesPage() {
     setNotes(null)
     setNotesError("")
     setNewNoteBody("")
+    setIdPhotoUrls(null)
   }
 
   async function handleDelete() {
@@ -1072,6 +1099,36 @@ export default function ServicesPage() {
               label="Número de Cédula de Identidad y Electoral"
               value={selected.clients.id_number}
             />
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                Fotografías de la cédula
+              </span>
+              {idPhotoUrls === null && (
+                <p className="text-xs text-muted-foreground">Cargando...</p>
+              )}
+              {idPhotoUrls !== null && idPhotoUrls.length === 0 && (
+                <p className="text-sm">—</p>
+              )}
+              {idPhotoUrls !== null && idPhotoUrls.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {idPhotoUrls.map((url) => (
+                    <a
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block overflow-hidden rounded-lg border"
+                    >
+                      <img
+                        src={url}
+                        alt="Foto de cédula"
+                        className="h-28 w-40 object-cover"
+                      />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
             <DetailRow
               label="Correo Electrónico"
               value={selected.clients.email}

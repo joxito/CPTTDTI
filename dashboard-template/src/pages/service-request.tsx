@@ -167,6 +167,29 @@ export default function ServiceRequestPage({
     setSubmitted(true)
   }
 
+  // Sube las fotos de cédula al bucket privado "cedulas" y guarda sus
+  // rutas en el cliente. No bloquea el envío del formulario si falla —
+  // la solicitud en sí importa más que las fotos.
+  async function uploadIdPhotos(clientId: string) {
+    const paths: string[] = []
+
+    for (const file of idPhotos) {
+      const extension = file.name.split(".").pop() || "jpg"
+      const path = `${clientId}/${crypto.randomUUID()}.${extension}`
+      const { error } = await supabase.storage
+        .from("cedulas")
+        .upload(path, file, { contentType: file.type })
+      if (!error) paths.push(path)
+    }
+
+    if (paths.length > 0) {
+      await supabase.rpc("set_client_id_photos", {
+        p_client_id: clientId,
+        p_paths: paths,
+      })
+    }
+  }
+
   async function handleConfirmYearLimit() {
     if (!yearLimitWarning) return
     setSubmitting(true)
@@ -238,6 +261,8 @@ export default function ServiceRequestPage({
       )
       return
     }
+
+    if (idPhotos.length > 0) await uploadIdPhotos(clientId)
 
     const servicePayload = {
       sector: formData.get("sector"),

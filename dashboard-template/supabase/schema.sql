@@ -24,6 +24,10 @@ create table if not exists clients (
   email text not null,
   address text,
 
+  -- Rutas dentro del bucket de Storage "cedulas" (privado). No son URLs
+  -- públicas — hay que pedir una signed URL para verlas.
+  id_photo_paths text[],
+
   -- Borrado suave: al "eliminar" un cliente se marca esta columna en vez
   -- de borrar la fila, para poder revertirlo desde el historial.
   deleted_at timestamptz
@@ -305,6 +309,40 @@ end;
 $$;
 
 grant execute on function find_or_create_client(jsonb) to anon, authenticated;
+
+-- Bucket privado para las fotos de cédula: cualquiera puede subir desde
+-- el formulario público, solo el staff logueado puede verlas.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('cedulas', 'cedulas', false, 8388608, array['image/jpeg', 'image/png', 'image/webp', 'image/heic'])
+on conflict (id) do nothing;
+
+create policy "Cualquiera puede subir fotos de cédula"
+  on storage.objects for insert
+  to anon, authenticated
+  with check (bucket_id = 'cedulas');
+
+create policy "Staff autenticado ve las fotos de cédula"
+  on storage.objects for select
+  to authenticated
+  using (bucket_id = 'cedulas');
+
+create policy "Staff autenticado borra fotos de cédula"
+  on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'cedulas');
+
+-- Guarda las rutas de las fotos ya subidas al bucket. Security definer
+-- porque clients ya no acepta update directo de la anon key.
+create or replace function set_client_id_photos(p_client_id uuid, p_paths text[])
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update clients set id_photo_paths = p_paths where id = p_client_id;
+$$;
+
+grant execute on function set_client_id_photos(uuid, text[]) to anon, authenticated;
 
 create or replace function count_client_services_this_year(p_client_id uuid, p_year int)
 returns int
