@@ -1,9 +1,11 @@
-import { NavLink } from "react-router-dom"
+import { NavLink, useNavigate } from "react-router-dom"
 import {
   LayoutDashboard,
   Users,
+  UserCog,
   Settings,
   ClipboardList,
+  Briefcase,
   History,
   LogOut,
   X,
@@ -11,17 +13,21 @@ import {
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useAuth } from "@/hooks/use-auth"
+import { initialsFromName } from "@/lib/format"
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/customers", label: "Clientes", icon: Users },
+  { to: "/servicios", label: "Servicios", icon: Briefcase },
   {
     to: "/solicitud-servicios",
     label: "Solicitud de Servicios",
     icon: ClipboardList,
   },
   { to: "/historial", label: "Historial", icon: History },
+  { to: "/usuarios", label: "Usuarios", icon: UserCog },
   { to: "/settings", label: "Configuración", icon: Settings },
 ]
 
@@ -31,6 +37,14 @@ type SidebarProps = {
 }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
+  const navigate = useNavigate()
+  const { staffProfile, signOut } = useAuth()
+
+  async function handleSignOut() {
+    await signOut()
+    navigate("/login", { replace: true })
+  }
+
   return (
     <>
       {/* overlay for mobile */}
@@ -88,16 +102,17 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <div className="border-t border-sidebar-border p-3">
           <div className="flex items-center gap-3 rounded-md px-2 py-2">
             <Avatar>
+              {staffProfile?.photo && <AvatarImage src={staffProfile.photo} />}
               <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground">
-                TU
+                {initialsFromName(staffProfile?.name)}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-sidebar-foreground">
-                Usuario
+                {staffProfile?.name ?? "..."}
               </p>
-              <p className="truncate text-xs text-sidebar-foreground/60">
-                Admin
+              <p className="truncate text-xs text-sidebar-foreground/60 capitalize">
+                {staffProfile?.role ?? ""}
               </p>
             </div>
             <Button
@@ -105,6 +120,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               size="icon"
               className="size-8 shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               aria-label="Cerrar sesión"
+              onClick={handleSignOut}
             >
               <LogOut className="size-4" />
             </Button>

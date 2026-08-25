@@ -1,0 +1,10 @@
+{
+  "client_id": "8152a7da-dca8-44e8-93a0-fbfb5b6363e9",
+  "sector": "Servicios",
+  "business_description": "Tercer servicio de prueba para el limite anual",
+  "start_date": "2020-01-01",
+  "employee_count": 5,
+  "services": ["Asistencia técnica especializada"],
+  "referral": "Ferias",
+  "confidentiality": "si"
+}

@@ -1,7 +1,8 @@
 import { Bell, Menu, Search } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,12 +12,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "@/components/layout/theme-toggle"
+import { useAuth } from "@/hooks/use-auth"
+import { initialsFromName } from "@/lib/format"
 
 type TopbarProps = {
   onMenuClick: () => void
 }
 
 export function Topbar({ onMenuClick }: TopbarProps) {
+  const navigate = useNavigate()
+  const { staffProfile, signOut } = useAuth()
+
+  async function handleSignOut() {
+    await signOut()
+    navigate("/login", { replace: true })
+  }
+
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/60">
       <Button
@@ -49,17 +60,25 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           <DropdownMenuTrigger asChild>
             <button className="ml-1 rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               <Avatar>
-                <AvatarFallback>TU</AvatarFallback>
+                {staffProfile?.photo && <AvatarImage src={staffProfile.photo} />}
+                <AvatarFallback>
+                  {initialsFromName(staffProfile?.name)}
+                </AvatarFallback>
               </Avatar>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Mi cuenta</DropdownMenuLabel>
+            <DropdownMenuLabel>
+              {staffProfile?.name ?? "Mi cuenta"}
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Perfil</DropdownMenuItem>
-            <DropdownMenuItem>Configuración</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/settings")}>
+              Configuración
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Cerrar sesión</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSignOut}>
+              Cerrar sesión
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

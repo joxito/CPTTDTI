@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import {
+  AlertTriangle,
   Camera,
   Check,
   CheckCircle2,
@@ -38,6 +39,7 @@ import {
   formatPhoneNumber,
   formatCedula,
 } from "@/lib/format"
+import { useAuth } from "@/hooks/use-auth"
 import { supabase } from "@/lib/supabase"
 
 function RequiredMark() {
@@ -51,6 +53,7 @@ type ServiceRequestPageProps = {
 export default function ServiceRequestPage({
   standalone = false,
 }: ServiceRequestPageProps) {
+  const { staffProfile } = useAuth()
   const [submitted, setSubmitted] = useState(false)
   const [sector, setSector] = useState("")
   const [referral, setReferral] = useState("")
@@ -71,6 +74,11 @@ export default function ServiceRequestPage({
   const [linkCopied, setLinkCopied] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
+  const [yearLimitWarning, setYearLimitWarning] = useState<{
+    clientId: string
+    servicePayload: Record<string, unknown>
+    count: number
+  } | null>(null)
   const section1Ref = useRef<HTMLDivElement>(null)
   const section2Ref = useRef<HTMLDivElement>(null)
   const idPhotosInputRef = useRef<HTMLInputElement>(null)
@@ -99,7 +107,7 @@ export default function ServiceRequestPage({
     const combined = [...idPhotos, ...files]
 
     if (combined.length > 2) {
-      setIdPhotosError("Solo podés subir un máximo de 2 fotos.")
+      setIdPhotosError("Solo puedes subir un máximo de 2 fotos.")
       setIdPhotos(combined.slice(0, 2))
     } else {
       setIdPhotosError("")
@@ -136,6 +144,58 @@ export default function ServiceRequestPage({
     )
   }
 
+  async function saveService(
+    clientId: string,
+    servicePayload: Record<string, unknown>
+  ) {
+    const { error } = await supabase.rpc("submit_service_request", {
+      p_client_id: clientId,
+      p_service: servicePayload,
+      p_actor: standalone ? "Cliente" : staffProfile?.name ?? "Usuario",
+    })
+
+    setSubmitting(false)
+    setYearLimitWarning(null)
+
+    if (error) {
+      setSubmitError(
+        "No pudimos guardar la solicitud. Intenta de nuevo en unos minutos."
+      )
+      return
+    }
+
+    setSubmitted(true)
+  }
+
+  // Sube las fotos de cédula al bucket privado "cedulas" y guarda sus
+  // rutas en el cliente. No bloquea el envío del formulario si falla —
+  // la solicitud en sí importa más que las fotos.
+  async function uploadIdPhotos(clientId: string) {
+    const paths: string[] = []
+
+    for (const file of idPhotos) {
+      const extension = file.name.split(".").pop() || "jpg"
+      const path = `${clientId}/${crypto.randomUUID()}.${extension}`
+      const { error } = await supabase.storage
+        .from("cedulas")
+        .upload(path, file, { contentType: file.type })
+      if (!error) paths.push(path)
+    }
+
+    if (paths.length > 0) {
+      await supabase.rpc("set_client_id_photos", {
+        p_client_id: clientId,
+        p_paths: paths,
+      })
+    }
+  }
+
+  async function handleConfirmYearLimit() {
+    if (!yearLimitWarning) return
+    setSubmitting(true)
+    await saveService(yearLimitWarning.clientId, yearLimitWarning.servicePayload)
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -168,55 +228,68 @@ export default function ServiceRequestPage({
     setSubmitting(true)
     setSubmitError("")
 
-    const { data, error } = await supabase
-      .from("service_requests")
-      .insert({
-        business_name: formData.get("businessName"),
-        has_rnc: formData.get("hasRnc"),
-        rnc_number: formData.get("rncNumber") || null,
-        province: formData.get("province"),
-        municipality: formData.get("municipality"),
-        representative_name: formData.get("representativeName"),
-        sex: formData.get("sex"),
-        age: Number(formData.get("age")),
-        phone: formData.get("phone"),
-        is_owner: formData.get("isOwner"),
-        id_number: formData.get("idNumber"),
-        email: formData.get("email"),
-        sector: formData.get("sector"),
-        sector_other: formData.get("sectorOther") || null,
-        business_description: formData.get("businessDescription"),
-        start_date: formData.get("startDate"),
-        employee_count: Number(formData.get("employeeCount")),
-        address: formData.get("address") || null,
-        services,
-        referral: formData.get("referral"),
-        referral_other: formData.get("referralOther") || null,
-        confidentiality: formData.get("confidentiality"),
-        signature: signature || null,
-      })
-      .select("id, business_name")
-      .single()
-
-    if (!error && data) {
-      await supabase.from("service_request_changes").insert({
-        service_request_id: data.id,
-        business_name: data.business_name,
-        action: "creado",
-        actor: standalone ? "Cliente" : "Usuario",
-      })
+    const rncNumber = (formData.get("rncNumber") as string) || ""
+    const idNumber = formData.get("idNumber") as string
+    const clientFields = {
+      business_name: formData.get("businessName"),
+      has_rnc: formData.get("hasRnc"),
+      rnc_number: rncNumber || null,
+      province: formData.get("province"),
+      municipality: formData.get("municipality"),
+      representative_name: formData.get("representativeName"),
+      sex: formData.get("sex"),
+      age: Number(formData.get("age")),
+      phone: formData.get("phone"),
+      is_owner: formData.get("isOwner"),
+      id_number: idNumber,
+      email: formData.get("email"),
+      address: formData.get("address") || null,
     }
 
-    setSubmitting(false)
+    // El RNC identifica al negocio; la cédula identifica a la persona y
+    // sirve de respaldo cuando no hay RNC. find_or_create_client busca por
+    // uno de los dos y actualiza si ya existe, o crea uno nuevo si no.
+    const { data: clientId, error: clientError } = await supabase.rpc(
+      "find_or_create_client",
+      { p_client: clientFields }
+    )
 
-    if (error) {
+    if (clientError || !clientId) {
+      setSubmitting(false)
       setSubmitError(
-        "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
+        "No pudimos guardar la solicitud. Intenta de nuevo en unos minutos."
       )
       return
     }
 
-    setSubmitted(true)
+    if (idPhotos.length > 0) await uploadIdPhotos(clientId)
+
+    const servicePayload = {
+      sector: formData.get("sector"),
+      sector_other: formData.get("sectorOther") || null,
+      business_description: formData.get("businessDescription"),
+      start_date: formData.get("startDate"),
+      employee_count: Number(formData.get("employeeCount")),
+      services,
+      referral: formData.get("referral"),
+      referral_other: formData.get("referralOther") || null,
+      confidentiality: formData.get("confidentiality"),
+      signature: signature || null,
+    }
+
+    const currentYear = new Date().getFullYear()
+    const { data: count } = await supabase.rpc(
+      "count_client_services_this_year",
+      { p_client_id: clientId, p_year: currentYear }
+    )
+
+    if ((count ?? 0) >= 2) {
+      setSubmitting(false)
+      setYearLimitWarning({ clientId, servicePayload, count: count ?? 0 })
+      return
+    }
+
+    await saveService(clientId, servicePayload)
   }
 
   const phoneAreaCode = phone.slice(0, 3)
@@ -225,6 +298,45 @@ export default function ServiceRequestPage({
 
   const isEmailInvalid =
     emailTouched && email.length > 0 && !emailPattern.test(email)
+
+  if (yearLimitWarning) {
+    return renderShell(
+      <div className="mx-auto flex max-w-2xl flex-col gap-6">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+              <AlertTriangle className="size-5" />
+            </div>
+            <CardTitle>Límite de servicios por año</CardTitle>
+            <CardDescription>
+              Este cliente ya tiene {yearLimitWarning.count} servicios
+              registrados este año. ¿Confirmas que quieres registrar uno más?
+            </CardDescription>
+            {submitError && (
+              <p className="text-sm text-destructive">{submitError}</p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setYearLimitWarning(null)}
+                disabled={submitting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleConfirmYearLimit}
+                disabled={submitting}
+              >
+                {submitting ? "Guardando..." : "Sí, registrar de todas formas"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   if (submitted) {
     return renderShell(
@@ -305,7 +417,7 @@ export default function ServiceRequestPage({
                 required
               >
                 <option value="">
-                  Seleccioná una opción
+                  Selecciona una opción
                 </option>
                 <option value="si">Sí</option>
                 <option value="no">No</option>
@@ -337,7 +449,7 @@ export default function ServiceRequestPage({
                     setMunicipality("")
                   }}
                   options={dominicanProvinces}
-                  placeholder="Seleccioná una provincia"
+                  placeholder="Selecciona una provincia"
                   searchPlaceholder="Buscar provincia..."
                   required
                 />
@@ -354,7 +466,7 @@ export default function ServiceRequestPage({
                   options={municipalitiesByProvince[province] ?? []}
                   placeholder={
                     province
-                      ? "Seleccioná un municipio"
+                      ? "Selecciona un municipio"
                       : "Primero seleccioná una provincia"
                   }
                   searchPlaceholder="Buscar municipio..."
@@ -382,7 +494,7 @@ export default function ServiceRequestPage({
                 </Label>
                 <Select id="sex" name="sex" defaultValue="" required>
                   <option value="">
-                    Seleccioná una opción
+                    Selecciona una opción
                   </option>
                   <option value="femenino">Femenino</option>
                   <option value="masculino">Masculino</option>
@@ -428,7 +540,7 @@ export default function ServiceRequestPage({
                 </Label>
                 <Select id="isOwner" name="isOwner" defaultValue="" required>
                   <option value="">
-                    Seleccioná una opción
+                    Selecciona una opción
                   </option>
                   <option value="si">Sí</option>
                   <option value="no">No</option>
@@ -556,7 +668,7 @@ export default function ServiceRequestPage({
               />
               {isEmailInvalid && (
                 <p className="text-xs text-destructive">
-                  Ingresá un correo electrónico válido.
+                  Ingresa un correo electrónico válido.
                 </p>
               )}
             </div>
@@ -574,7 +686,7 @@ export default function ServiceRequestPage({
                 required
               >
                 <option value="">
-                  Seleccioná un sector
+                  Selecciona un sector
                 </option>
                 {sectorOptions.map((option) => (
                   <option key={option} value={option}>
@@ -585,7 +697,7 @@ export default function ServiceRequestPage({
               {sector === "Otro" && (
                 <Input
                   name="sectorOther"
-                  placeholder="Especificá el sector económico"
+                  placeholder="Especifica el sector económico"
                   required
                 />
               )}
@@ -640,7 +752,7 @@ export default function ServiceRequestPage({
                 values={services}
                 onValuesChange={setServices}
                 options={serviceOptions}
-                placeholder="Seleccioná uno o más servicios"
+                placeholder="Selecciona uno o más servicios"
                 searchPlaceholder="Buscar servicio..."
                 columns={2}
                 required
@@ -659,7 +771,7 @@ export default function ServiceRequestPage({
                 required
               >
                 <option value="">
-                  Seleccioná una opción
+                  Selecciona una opción
                 </option>
                 {referralOptions.map((option) => (
                   <option key={option} value={option}>
@@ -670,7 +782,7 @@ export default function ServiceRequestPage({
               {referral === "Otro" && (
                 <Input
                   name="referralOther"
-                  placeholder="Especificá cómo te enteraste"
+                  placeholder="Especifica cómo te enteraste"
                   required
                 />
               )}
@@ -736,7 +848,7 @@ export default function ServiceRequestPage({
                 required
               >
                 <option value="">
-                  Seleccioná una opción
+                  Selecciona una opción
                 </option>
                 <option value="si">Sí</option>
                 <option value="no">No</option>

@@ -14,9 +14,11 @@ import { supabase } from "@/lib/supabase"
 
 type RequestSummary = {
   id: string
-  business_name: string
-  representative_name: string
   signature: string | null
+  clients: {
+    business_name: string
+    representative_name: string
+  }
 }
 
 export default function SignRequestPage() {
@@ -33,10 +35,7 @@ export default function SignRequestPage() {
     async function load() {
       if (!id) return
       const { data, error } = await supabase
-        .from("service_requests")
-        .select("id, business_name, representative_name, signature")
-        .eq("id", id)
-        .is("deleted_at", null)
+        .rpc("get_signing_info", { p_request_id: id })
         .single()
 
       if (error || !data) {
@@ -45,7 +44,21 @@ export default function SignRequestPage() {
         return
       }
 
-      setRequest(data)
+      const signingInfo = data as {
+        id: string
+        signature: string | null
+        business_name: string
+        representative_name: string
+      }
+
+      setRequest({
+        id: signingInfo.id,
+        signature: signingInfo.signature,
+        clients: {
+          business_name: signingInfo.business_name,
+          representative_name: signingInfo.representative_name,
+        },
+      })
       setLoading(false)
     }
 
@@ -58,27 +71,15 @@ export default function SignRequestPage() {
     setSaving(true)
     setSaveError("")
 
-    const { error } = await supabase
-      .from("service_requests")
-      .update({ signature })
-      .eq("id", request.id)
-
-    if (!error) {
-      await supabase.from("service_request_changes").insert({
-        service_request_id: request.id,
-        business_name: request.business_name,
-        action: "editado",
-        actor: "Cliente",
-        changed_fields: {
-          signature: { from: "(sin firma)", to: "(firma nueva)" },
-        },
-      })
-    }
+    const { error } = await supabase.rpc("sign_service_request", {
+      p_request_id: request.id,
+      p_signature: signature,
+    })
 
     setSaving(false)
 
     if (error) {
-      setSaveError("No pudimos guardar la firma. Intentá de nuevo.")
+      setSaveError("No pudimos guardar la firma. Intenta de nuevo.")
       return
     }
 
@@ -121,8 +122,8 @@ export default function SignRequestPage() {
                 </div>
                 <CardTitle>Documento firmado</CardTitle>
                 <CardDescription>
-                  Gracias, {request.representative_name}. Tu firma para{" "}
-                  {request.business_name} quedó registrada.
+                  Gracias, {request.clients.representative_name}. Tu firma
+                  para {request.clients.business_name} quedó registrada.
                 </CardDescription>
                 <img
                   src={justSigned ? signature : request.signature ?? ""}
@@ -137,7 +138,8 @@ export default function SignRequestPage() {
                 <div className="text-center">
                   <CardTitle>Firmar solicitud</CardTitle>
                   <CardDescription className="mt-1">
-                    {request.business_name} — {request.representative_name}
+                    {request.clients.business_name} —{" "}
+                    {request.clients.representative_name}
                   </CardDescription>
                 </div>
                 <p className="text-sm text-muted-foreground">
