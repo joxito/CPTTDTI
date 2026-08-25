@@ -86,6 +86,12 @@ create table if not exists service_requests (
   status text not null default 'iniciado'
     check (status in ('iniciado', 'en_proceso', 'completo')),
 
+  -- Quien lleva el servicio no siempre es quien lo creó, así que se
+  -- puede asignar/reasignar por separado. La referencia a staff se
+  -- agrega más abajo (esa tabla todavía no existe en este punto del
+  -- archivo).
+  assigned_advisor_id uuid,
+
   -- Borrado suave, igual que clients.
   deleted_at timestamptz
 );
@@ -237,6 +243,10 @@ $$;
 create trigger staff_role_guard
   before update on staff
   for each row execute function staff_prevent_self_role_change();
+
+alter table service_requests
+  add constraint service_requests_assigned_advisor_id_fkey
+  foreign key (assigned_advisor_id) references staff (id) on delete set null;
 
 -- Vista sin correo, para quien no sea la cuenta creadora.
 create or replace view staff_directory as
