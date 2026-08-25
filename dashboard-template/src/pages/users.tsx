@@ -500,6 +500,13 @@ export default function UsersPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
+                <Label>Correo</Label>
+                <p className="text-sm text-muted-foreground">
+                  {editingUser.email}
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="edit-user-name">Nombre</Label>
                 <Input
                   id="edit-user-name"
