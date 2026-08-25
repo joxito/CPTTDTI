@@ -431,10 +431,11 @@ set search_path = public
 as $$
 declare
   v_role text;
+  v_actor_name text;
   v_client_id uuid;
   v_business_name text;
 begin
-  select role into v_role from staff where id = auth.uid();
+  select role, name into v_role, v_actor_name from staff where id = auth.uid();
 
   if v_role is distinct from 'administrador' then
     raise exception 'Solo un administrador puede revertir una eliminación';
@@ -452,7 +453,7 @@ begin
   select business_name into v_business_name from clients where id = v_client_id;
 
   insert into service_request_changes (service_request_id, business_name, action, actor)
-  values (p_service_request_id, v_business_name, 'restaurado', 'Usuario');
+  values (p_service_request_id, v_business_name, 'restaurado', coalesce(v_actor_name, 'Usuario'));
 end;
 $$;
 

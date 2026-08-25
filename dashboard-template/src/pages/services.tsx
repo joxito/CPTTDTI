@@ -355,6 +355,7 @@ export default function ServicesPage() {
         service_request_id:
           newNoteScope === "service" ? selected.id : null,
         body: newNoteBody.trim(),
+        author: staffProfile?.name ?? "Usuario",
       })
       .select("id, created_at, client_id, service_request_id, author, body")
       .single()
@@ -564,6 +565,7 @@ export default function ServicesPage() {
         service_request_id: selected.id,
         business_name: selected.clients.business_name,
         action: "eliminado",
+        actor: staffProfile?.name ?? "Usuario",
       })
     }
 
@@ -647,6 +649,7 @@ export default function ServicesPage() {
         business_name: editValues.business_name,
         action: "editado",
         changed_fields: changedFields,
+        actor: staffProfile?.name ?? "Usuario",
       })
     }
 

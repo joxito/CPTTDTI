@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Sheet } from "@/components/ui/sheet"
 import { serviceStatusOptions } from "@/data/service-request-options"
+import { useAuth } from "@/hooks/use-auth"
 import { supabase } from "@/lib/supabase"
 
 type Client = {
@@ -106,6 +107,7 @@ function DetailRow({
 
 export default function CustomersPage() {
   const navigate = useNavigate()
+  const { staffProfile } = useAuth()
   const [requests, setRequests] = useState<
     (ServiceRequest & { clients: Client })[] | null
   >(null)
@@ -234,7 +236,11 @@ export default function CustomersPage() {
 
     const { data, error } = await supabase
       .from("notes")
-      .insert({ client_id: selectedClientId, body: newNoteBody.trim() })
+      .insert({
+        client_id: selectedClientId,
+        body: newNoteBody.trim(),
+        author: staffProfile?.name ?? "Usuario",
+      })
       .select("id, created_at, client_id, service_request_id, author, body")
       .single()
 

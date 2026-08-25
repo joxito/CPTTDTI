@@ -39,6 +39,7 @@ import {
   formatPhoneNumber,
   formatCedula,
 } from "@/lib/format"
+import { useAuth } from "@/hooks/use-auth"
 import { supabase } from "@/lib/supabase"
 
 function RequiredMark() {
@@ -52,6 +53,7 @@ type ServiceRequestPageProps = {
 export default function ServiceRequestPage({
   standalone = false,
 }: ServiceRequestPageProps) {
+  const { staffProfile } = useAuth()
   const [submitted, setSubmitted] = useState(false)
   const [sector, setSector] = useState("")
   const [referral, setReferral] = useState("")
@@ -149,7 +151,7 @@ export default function ServiceRequestPage({
     const { error } = await supabase.rpc("submit_service_request", {
       p_client_id: clientId,
       p_service: servicePayload,
-      p_actor: standalone ? "Cliente" : "Usuario",
+      p_actor: standalone ? "Cliente" : staffProfile?.name ?? "Usuario",
     })
 
     setSubmitting(false)
