@@ -373,7 +373,8 @@ export default function UsersPage() {
               <h2 className="text-base font-semibold">¿Eliminar usuario?</h2>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Esta persona pierde el acceso al dashboard de inmediato.
+              Esta acción es irreversible: la persona pierde el acceso al
+              dashboard de inmediato y no se puede deshacer.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDeletingId(null)}>
