@@ -79,7 +79,7 @@ export default function SignRequestPage() {
     setSaving(false)
 
     if (error) {
-      setSaveError("No pudimos guardar la firma. Intentá de nuevo.")
+      setSaveError("No pudimos guardar la firma. Intenta de nuevo.")
       return
     }
 

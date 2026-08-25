@@ -2,13 +2,7 @@ import { useRef, useState } from "react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button, buttonVariants } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/hooks/use-auth"
@@ -49,6 +43,7 @@ export default function SettingsPage() {
   const [profileMessage, setProfileMessage] = useState("")
   const [profileError, setProfileError] = useState("")
 
+  const [oldPassword, setOldPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [savingPassword, setSavingPassword] = useState(false)
@@ -105,6 +100,8 @@ export default function SettingsPage() {
     setPasswordError("")
     setPasswordMessage("")
 
+    if (!session?.user.email) return
+
     if (newPassword.length < 8) {
       setPasswordError("La contraseña debe tener al menos 8 caracteres.")
       return
@@ -116,14 +113,27 @@ export default function SettingsPage() {
     }
 
     setSavingPassword(true)
+
+    const { error: reauthError } = await supabase.auth.signInWithPassword({
+      email: session.user.email,
+      password: oldPassword,
+    })
+
+    if (reauthError) {
+      setSavingPassword(false)
+      setPasswordError("La contraseña anterior no es correcta.")
+      return
+    }
+
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     setSavingPassword(false)
 
     if (error) {
-      setPasswordError("No pudimos cambiar la contraseña. Intentá de nuevo.")
+      setPasswordError("No pudimos cambiar la contraseña. Intenta de nuevo.")
       return
     }
 
+    setOldPassword("")
     setNewPassword("")
     setConfirmPassword("")
     setPasswordMessage("Contraseña actualizada.")
@@ -134,17 +144,13 @@ export default function SettingsPage() {
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Configuración</h1>
-        <p className="text-sm text-muted-foreground">
-          Ajustá tu perfil y tu contraseña.
-        </p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Perfil</CardTitle>
-          <CardDescription>Tu nombre y foto, visibles para el resto del equipo.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col gap-4 pb-6">
           <div className="flex items-center gap-4">
             <Avatar className="size-16">
               {staffProfile?.photo && <AvatarImage src={staffProfile.photo} />}
@@ -197,9 +203,19 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Cambiar contraseña</CardTitle>
-          <CardDescription>Correo: {session?.user.email}</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col gap-4 pb-6">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="old-password">Contraseña anterior</Label>
+            <Input
+              id="old-password"
+              type="password"
+              value={oldPassword}
+              onChange={(event) => setOldPassword(event.target.value)}
+              autoComplete="current-password"
+            />
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="new-password">Nueva contraseña</Label>
             <Input
@@ -231,7 +247,9 @@ export default function SettingsPage() {
 
           <Button
             onClick={handleChangePassword}
-            disabled={savingPassword || !newPassword || !confirmPassword}
+            disabled={
+              savingPassword || !oldPassword || !newPassword || !confirmPassword
+            }
             className="self-start"
           >
             {savingPassword ? "Guardando..." : "Cambiar contraseña"}

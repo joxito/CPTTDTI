@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { serviceRequestFieldLabels } from "@/data/service-request-field-labels"
+import { useAuth } from "@/hooks/use-auth"
 import { supabase } from "@/lib/supabase"
 
 type ChangeAction = "creado" | "editado" | "eliminado" | "restaurado"
@@ -56,6 +57,8 @@ function formatValue(value: unknown) {
 }
 
 export default function HistoryPage() {
+  const { staffProfile } = useAuth()
+  const isAdmin = staffProfile?.role === "administrador"
   const [changes, setChanges] = useState<Change[] | null>(null)
   const [error, setError] = useState("")
   const [restoringId, setRestoringId] = useState<string | null>(null)
@@ -68,7 +71,7 @@ export default function HistoryPage() {
       .order("created_at", { ascending: false })
 
     if (error) {
-      setError("No pudimos cargar el historial. Intentá de nuevo más tarde.")
+      setError("No pudimos cargar el historial. Intenta de nuevo más tarde.")
       return
     }
 
@@ -82,19 +85,11 @@ export default function HistoryPage() {
   async function handleRestore(change: Change) {
     setRestoringId(change.id)
 
-    const { error } = await supabase
-      .from("service_requests")
-      .update({ deleted_at: null })
-      .eq("id", change.service_request_id)
+    const { error } = await supabase.rpc("restore_service_request", {
+      p_service_request_id: change.service_request_id,
+    })
 
-    if (!error) {
-      await supabase.from("service_request_changes").insert({
-        service_request_id: change.service_request_id,
-        business_name: change.business_name,
-        action: "restaurado",
-      })
-      await loadChanges()
-    }
+    if (!error) await loadChanges()
 
     setRestoringId(null)
   }
@@ -197,7 +192,7 @@ export default function HistoryPage() {
                         <badge.icon className="size-3" />
                         {badge.label}
                       </Badge>
-                      {change.action === "eliminado" && isStillDeleted && (
+                      {change.action === "eliminado" && isStillDeleted && isAdmin && (
                         <Button
                           type="button"
                           size="sm"

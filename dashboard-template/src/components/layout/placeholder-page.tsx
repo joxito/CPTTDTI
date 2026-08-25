@@ -34,11 +34,11 @@ export function PlaceholderPage({
           <CardTitle className="mt-3">Página lista para construir</CardTitle>
           <CardDescription>
             Esta es una página de ejemplo dentro de la estructura del
-            proyecto. Reemplazá este contenido por tus propios componentes.
+            proyecto. Reemplaza este contenido por tus propios componentes.
           </CardDescription>
         </CardHeader>
         <CardContent className="pb-6 text-sm text-muted-foreground">
-          Encontrás esta ruta en{" "}
+          Encuentras esta ruta en{" "}
           <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
             src/pages
           </code>{" "}

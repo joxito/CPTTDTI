@@ -36,6 +36,7 @@ import {
   referralOptions,
   serviceStatusOptions,
 } from "@/data/service-request-options"
+import { useAuth } from "@/hooks/use-auth"
 import { formatCedula, formatPhoneNumber } from "@/lib/format"
 import { supabase } from "@/lib/supabase"
 
@@ -290,6 +291,8 @@ function DetailRow({
 }
 
 export default function CustomersPage() {
+  const { staffProfile } = useAuth()
+  const isAdmin = staffProfile?.role === "administrador"
   const [requests, setRequests] = useState<ServiceRequest[] | null>(null)
   const [error, setError] = useState("")
   const [query, setQuery] = useState("")
@@ -357,7 +360,7 @@ export default function CustomersPage() {
     setAddingNote(false)
 
     if (error || !data) {
-      setNotesError("No pudimos guardar la nota. Intentá de nuevo.")
+      setNotesError("No pudimos guardar la nota. Intenta de nuevo.")
       return
     }
 
@@ -368,7 +371,7 @@ export default function CustomersPage() {
   async function handleDeleteNote(noteId: string) {
     const { error } = await supabase.from("notes").delete().eq("id", noteId)
     if (error) {
-      setNotesError("No pudimos eliminar la nota. Intentá de nuevo.")
+      setNotesError("No pudimos eliminar la nota. Intenta de nuevo.")
       return
     }
     setNotes((current) => current?.filter((note) => note.id !== noteId) ?? current)
@@ -437,7 +440,7 @@ export default function CustomersPage() {
       if (cancelled) return
 
       if (error) {
-        setError("No pudimos cargar los clientes. Intentá de nuevo más tarde.")
+        setError("No pudimos cargar los clientes. Intenta de nuevo más tarde.")
         return
       }
 
@@ -552,7 +555,7 @@ export default function CustomersPage() {
     setDeleting(false)
 
     if (error) {
-      setDeleteError("No pudimos eliminar el cliente. Intentá de nuevo.")
+      setDeleteError("No pudimos eliminar el cliente. Intenta de nuevo.")
       return
     }
 
@@ -635,7 +638,7 @@ export default function CustomersPage() {
     setSaving(false)
 
     if (error) {
-      setSaveError("No pudimos guardar los cambios. Intentá de nuevo.")
+      setSaveError("No pudimos guardar los cambios. Intenta de nuevo.")
       return
     }
 
@@ -781,17 +784,19 @@ export default function CustomersPage() {
                 Limpiar filtros
               </Button>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="ml-auto gap-1.5"
-              disabled={!filteredRequests || filteredRequests.length === 0}
-              onClick={handleExport}
-            >
-              <Download className="size-4" />
-              Exportar ({filteredRequests?.length ?? 0})
-            </Button>
+            {isAdmin && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="ml-auto gap-1.5"
+                disabled={!filteredRequests || filteredRequests.length === 0}
+                onClick={handleExport}
+              >
+                <Download className="size-4" />
+                Exportar ({filteredRequests?.length ?? 0})
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -1150,7 +1155,7 @@ export default function CustomersPage() {
                 <Textarea
                   value={newNoteBody}
                   onChange={(event) => setNewNoteBody(event.target.value)}
-                  placeholder="Agregá una nota..."
+                  placeholder="Agrega una nota..."
                   className="min-h-16"
                 />
                 <div className="flex justify-end">
@@ -1301,7 +1306,7 @@ export default function CustomersPage() {
                   updateEditValue("municipality", "")
                 }}
                 options={dominicanProvinces}
-                placeholder="Seleccioná una provincia"
+                placeholder="Selecciona una provincia"
                 searchPlaceholder="Buscar provincia..."
               />
             </div>
@@ -1313,7 +1318,7 @@ export default function CustomersPage() {
                 value={editValues.municipality}
                 onValueChange={(next) => updateEditValue("municipality", next)}
                 options={municipalitiesByProvince[editValues.province] ?? []}
-                placeholder="Seleccioná un municipio"
+                placeholder="Selecciona un municipio"
                 searchPlaceholder="Buscar municipio..."
                 disabled={!editValues.province}
               />
@@ -1436,7 +1441,7 @@ export default function CustomersPage() {
                   onChange={(event) =>
                     updateEditValue("sector_other", event.target.value)
                   }
-                  placeholder="Especificá el sector económico"
+                  placeholder="Especifica el sector económico"
                 />
               )}
             </div>
@@ -1500,7 +1505,7 @@ export default function CustomersPage() {
                 values={editValues.services}
                 onValuesChange={(next) => updateEditValue("services", next)}
                 options={serviceOptions}
-                placeholder="Seleccioná uno o más servicios"
+                placeholder="Selecciona uno o más servicios"
                 searchPlaceholder="Buscar servicio..."
                 columns={1}
               />
@@ -1529,7 +1534,7 @@ export default function CustomersPage() {
                   onChange={(event) =>
                     updateEditValue("referral_other", event.target.value)
                   }
-                  placeholder="Especificá cómo se enteró"
+                  placeholder="Especifica cómo se enteró"
                 />
               )}
             </div>

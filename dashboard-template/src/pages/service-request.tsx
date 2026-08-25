@@ -105,7 +105,7 @@ export default function ServiceRequestPage({
     const combined = [...idPhotos, ...files]
 
     if (combined.length > 2) {
-      setIdPhotosError("Solo podés subir un máximo de 2 fotos.")
+      setIdPhotosError("Solo puedes subir un máximo de 2 fotos.")
       setIdPhotos(combined.slice(0, 2))
     } else {
       setIdPhotosError("")
@@ -157,7 +157,7 @@ export default function ServiceRequestPage({
 
     if (error) {
       setSubmitError(
-        "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
+        "No pudimos guardar la solicitud. Intenta de nuevo en unos minutos."
       )
       return
     }
@@ -232,7 +232,7 @@ export default function ServiceRequestPage({
     if (clientError || !clientId) {
       setSubmitting(false)
       setSubmitError(
-        "No pudimos guardar la solicitud. Intentá de nuevo en unos minutos."
+        "No pudimos guardar la solicitud. Intenta de nuevo en unos minutos."
       )
       return
     }
@@ -283,7 +283,7 @@ export default function ServiceRequestPage({
             <CardTitle>Límite de servicios por año</CardTitle>
             <CardDescription>
               Este cliente ya tiene {yearLimitWarning.count} servicios
-              registrados este año. ¿Confirmás que querés registrar uno más?
+              registrados este año. ¿Confirmas que quieres registrar uno más?
             </CardDescription>
             {submitError && (
               <p className="text-sm text-destructive">{submitError}</p>
@@ -390,7 +390,7 @@ export default function ServiceRequestPage({
                 required
               >
                 <option value="">
-                  Seleccioná una opción
+                  Selecciona una opción
                 </option>
                 <option value="si">Sí</option>
                 <option value="no">No</option>
@@ -422,7 +422,7 @@ export default function ServiceRequestPage({
                     setMunicipality("")
                   }}
                   options={dominicanProvinces}
-                  placeholder="Seleccioná una provincia"
+                  placeholder="Selecciona una provincia"
                   searchPlaceholder="Buscar provincia..."
                   required
                 />
@@ -439,7 +439,7 @@ export default function ServiceRequestPage({
                   options={municipalitiesByProvince[province] ?? []}
                   placeholder={
                     province
-                      ? "Seleccioná un municipio"
+                      ? "Selecciona un municipio"
                       : "Primero seleccioná una provincia"
                   }
                   searchPlaceholder="Buscar municipio..."
@@ -467,7 +467,7 @@ export default function ServiceRequestPage({
                 </Label>
                 <Select id="sex" name="sex" defaultValue="" required>
                   <option value="">
-                    Seleccioná una opción
+                    Selecciona una opción
                   </option>
                   <option value="femenino">Femenino</option>
                   <option value="masculino">Masculino</option>
@@ -513,7 +513,7 @@ export default function ServiceRequestPage({
                 </Label>
                 <Select id="isOwner" name="isOwner" defaultValue="" required>
                   <option value="">
-                    Seleccioná una opción
+                    Selecciona una opción
                   </option>
                   <option value="si">Sí</option>
                   <option value="no">No</option>
@@ -641,7 +641,7 @@ export default function ServiceRequestPage({
               />
               {isEmailInvalid && (
                 <p className="text-xs text-destructive">
-                  Ingresá un correo electrónico válido.
+                  Ingresa un correo electrónico válido.
                 </p>
               )}
             </div>
@@ -659,7 +659,7 @@ export default function ServiceRequestPage({
                 required
               >
                 <option value="">
-                  Seleccioná un sector
+                  Selecciona un sector
                 </option>
                 {sectorOptions.map((option) => (
                   <option key={option} value={option}>
@@ -670,7 +670,7 @@ export default function ServiceRequestPage({
               {sector === "Otro" && (
                 <Input
                   name="sectorOther"
-                  placeholder="Especificá el sector económico"
+                  placeholder="Especifica el sector económico"
                   required
                 />
               )}
@@ -725,7 +725,7 @@ export default function ServiceRequestPage({
                 values={services}
                 onValuesChange={setServices}
                 options={serviceOptions}
-                placeholder="Seleccioná uno o más servicios"
+                placeholder="Selecciona uno o más servicios"
                 searchPlaceholder="Buscar servicio..."
                 columns={2}
                 required
@@ -744,7 +744,7 @@ export default function ServiceRequestPage({
                 required
               >
                 <option value="">
-                  Seleccioná una opción
+                  Selecciona una opción
                 </option>
                 {referralOptions.map((option) => (
                   <option key={option} value={option}>
@@ -755,7 +755,7 @@ export default function ServiceRequestPage({
               {referral === "Otro" && (
                 <Input
                   name="referralOther"
-                  placeholder="Especificá cómo te enteraste"
+                  placeholder="Especifica cómo te enteraste"
                   required
                 />
               )}
@@ -821,7 +821,7 @@ export default function ServiceRequestPage({
                 required
               >
                 <option value="">
-                  Seleccioná una opción
+                  Selecciona una opción
                 </option>
                 <option value="si">Sí</option>
                 <option value="no">No</option>

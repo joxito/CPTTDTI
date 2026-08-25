@@ -29,7 +29,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
         if (videoRef.current) videoRef.current.srcObject = stream
       } catch {
         setError(
-          "No pudimos acceder a la cámara. Revisá que le hayas dado permiso al navegador."
+          "No pudimos acceder a la cámara. Revisa que le hayas dado permiso al navegador."
         )
       }
     }

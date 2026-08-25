@@ -30,6 +30,18 @@ type StaffRow = {
   email?: string
 }
 
+async function extractFunctionErrorMessage(error: unknown) {
+  const context = (error as { context?: Response })?.context
+  if (!context) return null
+
+  try {
+    const body = await context.clone().json()
+    return typeof body?.error === "string" ? body.error : null
+  } catch {
+    return null
+  }
+}
+
 function generatePassword() {
   const chars =
     "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%"
@@ -121,8 +133,9 @@ export default function UsersPage() {
     setCreating(false)
 
     if (fnError) {
+      const detail = await extractFunctionErrorMessage(fnError)
       setCreateError(
-        "No pudimos crear el usuario. Revisá que el correo no esté ya registrado."
+        `No pudimos crear el usuario "${newEmail}". ${detail ?? "Revisa que el correo no esté ya registrado."}`
       )
       return
     }
@@ -166,7 +179,7 @@ export default function UsersPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Usuarios</h1>
           <p className="text-sm text-muted-foreground">
             {isCreator
-              ? "Gestioná quién tiene acceso al sistema."
+              ? "Gestiona quién tiene acceso al sistema."
               : "Personas con acceso al sistema."}
           </p>
         </div>
