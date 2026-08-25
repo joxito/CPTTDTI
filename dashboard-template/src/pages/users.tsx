@@ -53,7 +53,8 @@ function generatePassword() {
 }
 
 export default function UsersPage() {
-  const { isCreator } = useAuth()
+  const { isCreator, staffProfile } = useAuth()
+  const isAdmin = staffProfile?.role === "administrador"
   const [staff, setStaff] = useState<StaffRow[] | null>(null)
   const [error, setError] = useState("")
 
@@ -268,12 +269,12 @@ export default function UsersPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Usuarios</h1>
           <p className="text-sm text-muted-foreground">
-            {isCreator
+            {isAdmin
               ? "Gestiona quién tiene acceso al sistema."
               : "Personas con acceso al sistema."}
           </p>
         </div>
-        {isCreator && (
+        {isAdmin && (
           <Button onClick={openAddSheet} className="gap-1.5">
             <Plus className="size-4" />
             Agregar usuario
