@@ -53,6 +53,14 @@ type SubmittedAgreement = {
   agreementDate: string
 }
 
+export type CompletionAgreementPdfData = {
+  businessName: string
+  advisorName: string
+  advisorSignature: string
+  clientSignature: string
+  agreementDate: string
+}
+
 function loadImageDataUrl(url: string): Promise<string> {
   return fetch(url)
     .then((res) => res.blob())
@@ -76,7 +84,7 @@ const CLIENT_STATEMENTS = [
 // Genera el PDF a mano (en vez de imprimir el HTML) para que el
 // documento no lleve el encabezado/pie que agrega el navegador al
 // imprimir (URL, fecha, título de la página).
-async function buildAgreementPdf(agreement: SubmittedAgreement) {
+export async function buildAgreementPdf(agreement: CompletionAgreementPdfData) {
   const doc = new jsPDF({ unit: "mm", format: "letter" })
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
@@ -101,7 +109,7 @@ async function buildAgreementPdf(agreement: SubmittedAgreement) {
   doc.setFont("helvetica", "bold")
   doc.text("Cliente", margin, y)
   doc.setFont("helvetica", "normal")
-  doc.text(agreement.service.business_name, margin + 25, y)
+  doc.text(agreement.businessName, margin + 25, y)
   y += 4
   doc.line(margin, y, margin + contentWidth, y)
   y += 6
@@ -325,7 +333,13 @@ export default function CompletionAgreementPage() {
     setPdfError("")
 
     try {
-      const doc = await buildAgreementPdf(submitted)
+      const doc = await buildAgreementPdf({
+        businessName: submitted.service.business_name,
+        advisorName: submitted.advisorName,
+        advisorSignature: submitted.advisorSignature,
+        clientSignature: submitted.clientSignature,
+        agreementDate: submitted.agreementDate,
+      })
       doc.save(`acuerdo-finalizacion-${submitted.service.business_name}.pdf`)
     } catch {
       setPdfError("No pudimos generar el PDF. Intenta de nuevo.")

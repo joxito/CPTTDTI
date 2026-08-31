@@ -43,6 +43,14 @@ import {
 import { regionByProvince, monthNameFromDate, trimesterFromDate } from "@/data/dominican-regions"
 import { CREATOR_EMAIL, useAuth } from "@/hooks/use-auth"
 import { formatCedula, formatPhoneNumber } from "@/lib/format"
+import {
+  buildAgreementPdf,
+  type CompletionAgreementPdfData,
+} from "@/pages/completion-agreement"
+import {
+  buildActionAgreementPdf,
+  type ActionAgreementPdfData,
+} from "@/pages/action-agreement"
 import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -627,10 +635,40 @@ export default function ServicesPage() {
   const [evidenceError, setEvidenceError] = useState("")
   const [exportingServicePdf, setExportingServicePdf] = useState(false)
   const [exportServicePdfError, setExportServicePdfError] = useState("")
+  const [servicePdfChoiceOpen, setServicePdfChoiceOpen] = useState(false)
+  const [availableAgreements, setAvailableAgreements] = useState<{
+    actionAgreementId: string | null
+    completionAgreementId: string | null
+  }>({ actionAgreementId: null, completionAgreementId: null })
+
+  async function loadAvailableAgreements(requestId: string) {
+    const [actionResult, completionResult] = await Promise.all([
+      supabase
+        .from("project_action_agreements")
+        .select("id")
+        .eq("service_request_id", requestId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("completion_agreements")
+        .select("id")
+        .eq("service_request_id", requestId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+
+    setAvailableAgreements({
+      actionAgreementId: actionResult.data?.id ?? null,
+      completionAgreementId: completionResult.data?.id ?? null,
+    })
+  }
 
   async function handleExportServicePdf() {
     if (!selected) return
 
+    setServicePdfChoiceOpen(false)
     setExportingServicePdf(true)
     setExportServicePdfError("")
 
@@ -649,6 +687,106 @@ export default function ServicesPage() {
         idPhotoUrls ?? []
       )
       doc.save(`solicitud-servicio-${selected.clients.business_name}.pdf`)
+    } catch {
+      setExportServicePdfError("No pudimos generar el PDF. Intenta de nuevo.")
+    }
+
+    setExportingServicePdf(false)
+  }
+
+  async function handleExportActionAgreementPdf() {
+    if (!selected || !availableAgreements.actionAgreementId) return
+
+    setServicePdfChoiceOpen(false)
+    setExportingServicePdf(true)
+    setExportServicePdfError("")
+
+    try {
+      const { data, error } = await supabase
+        .from("project_action_agreements")
+        .select("*")
+        .eq("id", availableAgreements.actionAgreementId)
+        .single()
+
+      if (error || !data) throw error ?? new Error("No encontrado")
+
+      const advisorName =
+        staffOptions.find((option) => option.id === data.advisor_id)?.name ??
+        "Sin asignar"
+
+      const activities = (
+        data.activities as {
+          description: string
+          start_date: string
+          end_date: string
+          responsible: string
+        }[]
+      ).map((activity) => ({
+        description: activity.description,
+        startDate: activity.start_date,
+        endDate: activity.end_date,
+        responsible: activity.responsible,
+      }))
+
+      const pdfData: ActionAgreementPdfData = {
+        businessName: selected.clients.business_name,
+        representativeName: selected.clients.representative_name,
+        projectName: data.project_name,
+        serviceType: data.service_type,
+        serviceQuantity: data.service_quantity ?? "",
+        estimatedCompletionTime: data.estimated_completion_time ?? "",
+        identifiedNeed: data.identified_need,
+        serviceScope: data.service_scope,
+        proposedSolution: data.proposed_solution,
+        agreements: data.agreements,
+        activities,
+        advisorName,
+        advisorSignature: data.advisor_signature,
+        coordinatorName: data.coordinator_name,
+        coordinatorSignature: data.coordinator_signature,
+        clientSignature: data.client_signature,
+        agreementDate: data.agreement_date,
+      }
+
+      const doc = await buildActionAgreementPdf(pdfData)
+      doc.save(`acuerdo-acciones-${selected.clients.business_name}.pdf`)
+    } catch {
+      setExportServicePdfError("No pudimos generar el PDF. Intenta de nuevo.")
+    }
+
+    setExportingServicePdf(false)
+  }
+
+  async function handleExportCompletionAgreementPdf() {
+    if (!selected || !availableAgreements.completionAgreementId) return
+
+    setServicePdfChoiceOpen(false)
+    setExportingServicePdf(true)
+    setExportServicePdfError("")
+
+    try {
+      const { data, error } = await supabase
+        .from("completion_agreements")
+        .select("*")
+        .eq("id", availableAgreements.completionAgreementId)
+        .single()
+
+      if (error || !data) throw error ?? new Error("No encontrado")
+
+      const advisorName =
+        staffOptions.find((option) => option.id === data.advisor_id)?.name ??
+        "Sin asignar"
+
+      const pdfData: CompletionAgreementPdfData = {
+        businessName: selected.clients.business_name,
+        advisorName,
+        advisorSignature: data.advisor_signature,
+        clientSignature: data.client_signature,
+        agreementDate: data.agreement_date,
+      }
+
+      const doc = await buildAgreementPdf(pdfData)
+      doc.save(`acuerdo-finalizacion-${selected.clients.business_name}.pdf`)
     } catch {
       setExportServicePdfError("No pudimos generar el PDF. Intenta de nuevo.")
     }
@@ -975,6 +1113,7 @@ export default function ServicesPage() {
     loadNotes(request)
     loadIdPhotoUrls(request.clients.id_photo_paths)
     loadEvidenceCounts(request.id)
+    loadAvailableAgreements(request.id)
   }
 
   // Deep link desde Clientes: /servicios?id=<serviceRequestId> abre ese
@@ -1069,6 +1208,10 @@ export default function ServicesPage() {
     setIdPhotoUrls(null)
     setEvidenceCounts(new Map())
     closeEvidenceModal()
+    setAvailableAgreements({
+      actionAgreementId: null,
+      completionAgreementId: null,
+    })
   }
 
   async function handleDelete() {
@@ -1533,7 +1676,7 @@ export default function ServicesPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={handleExportServicePdf}
+                  onClick={() => setServicePdfChoiceOpen(true)}
                   disabled={exportingServicePdf}
                 >
                   <FileDown className="size-4" />
@@ -2378,6 +2521,64 @@ export default function ServicesPage() {
                 {evidenceUploading ? "Subiendo..." : "Agregar imagen"}
               </span>
             </label>
+          </div>
+        </div>
+      )}
+
+      {servicePdfChoiceOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg">
+            <h2 className="text-base font-semibold">Elige qué exportar</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cada formulario se descarga como su propio PDF.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start"
+                onClick={handleExportServicePdf}
+              >
+                Solicitud de Servicios
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start"
+                disabled={!availableAgreements.actionAgreementId}
+                onClick={handleExportActionAgreementPdf}
+              >
+                Acuerdo de Acciones del Proyecto
+                {!availableAgreements.actionAgreementId && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    No disponible
+                  </span>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start"
+                disabled={!availableAgreements.completionAgreementId}
+                onClick={handleExportCompletionAgreementPdf}
+              >
+                Acuerdo de Finalización
+                {!availableAgreements.completionAgreementId && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    No disponible
+                  </span>
+                )}
+              </Button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setServicePdfChoiceOpen(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
           </div>
         </div>
       )}

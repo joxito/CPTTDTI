@@ -36,7 +36,7 @@ type StaffOption = {
   signature: string | null
 }
 
-type Activity = {
+export type Activity = {
   description: string
   startDate: string
   endDate: string
@@ -104,11 +104,33 @@ type SubmittedAgreement = {
   agreementDate: string
 }
 
+export type ActionAgreementPdfData = {
+  businessName: string
+  representativeName: string
+  projectName: string
+  serviceType: string
+  serviceQuantity: string
+  estimatedCompletionTime: string
+  identifiedNeed: string
+  serviceScope: string
+  proposedSolution: string
+  agreements: string
+  activities: Activity[]
+  advisorName: string
+  advisorSignature: string
+  coordinatorName: string
+  coordinatorSignature: string
+  clientSignature: string
+  agreementDate: string
+}
+
 // Genera el PDF a mano (en vez de imprimir el HTML) para que el
 // documento no lleve el encabezado/pie que agrega el navegador al
 // imprimir (URL, fecha, título de la página). Dos columnas y fuente
 // compacta para que quepa en la menor cantidad de páginas posible.
-async function buildActionAgreementPdf(agreement: SubmittedAgreement) {
+export async function buildActionAgreementPdf(
+  agreement: ActionAgreementPdfData
+) {
   const doc = new jsPDF({ unit: "mm", format: "letter" })
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
@@ -183,8 +205,8 @@ async function buildActionAgreementPdf(agreement: SubmittedAgreement) {
   const right: Cursor = { x: rightX, y: startY }
 
   addSectionTitle(left, "Datos del Proyecto")
-  addField(left, "Nombre del Cliente", agreement.service.business_name)
-  addField(left, "Contacto", agreement.service.representative_name)
+  addField(left, "Nombre del Cliente", agreement.businessName)
+  addField(left, "Contacto", agreement.representativeName)
   addField(left, "Nombre Proyecto", agreement.projectName)
   addField(left, "Tipo de servicio", agreement.serviceType)
   addField(left, "Cantidad de servicio", agreement.serviceQuantity)
@@ -504,7 +526,25 @@ export default function ActionAgreementPage() {
     setPdfError("")
 
     try {
-      const doc = await buildActionAgreementPdf(submitted)
+      const doc = await buildActionAgreementPdf({
+        businessName: submitted.service.business_name,
+        representativeName: submitted.service.representative_name,
+        projectName: submitted.projectName,
+        serviceType: submitted.serviceType,
+        serviceQuantity: submitted.serviceQuantity,
+        estimatedCompletionTime: submitted.estimatedCompletionTime,
+        identifiedNeed: submitted.identifiedNeed,
+        serviceScope: submitted.serviceScope,
+        proposedSolution: submitted.proposedSolution,
+        agreements: submitted.agreements,
+        activities: submitted.activities,
+        advisorName: submitted.advisorName,
+        advisorSignature: submitted.advisorSignature,
+        coordinatorName: submitted.coordinatorName,
+        coordinatorSignature: submitted.coordinatorSignature,
+        clientSignature: submitted.clientSignature,
+        agreementDate: submitted.agreementDate,
+      })
       doc.save(`acuerdo-acciones-${submitted.service.business_name}.pdf`)
     } catch {
       setPdfError("No pudimos generar el PDF. Intenta de nuevo.")
