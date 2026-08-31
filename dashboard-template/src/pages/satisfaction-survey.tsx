@@ -171,7 +171,7 @@ export default function SatisfactionSurveyPage({
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">
-          Encuesta de Satisfacción — Asistencia Técnica
+          Encuesta de Satisfacción
         </h1>
         {!standalone && (
           <Button type="button" variant="outline" onClick={handleCopyLink}>
