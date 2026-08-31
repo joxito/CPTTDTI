@@ -172,6 +172,11 @@ export default function CompletionAgreementPage() {
             Exportar / Imprimir
           </Button>
         </div>
+        <p className="text-sm text-muted-foreground print:hidden">
+          En la ventana de impresión, abre "Más ajustes" y desmarca
+          "Encabezados y pies de página" para que no salga la URL ni la
+          fecha del navegador.
+        </p>
 
         <Card className="print:border-none print:shadow-none">
           <CardContent className="flex flex-col gap-6 py-8">
@@ -180,6 +185,21 @@ export default function CompletionAgreementPage() {
               alt="CPTTL"
               className="mx-auto w-[min(90%,320px)]"
             />
+
+            <table className="w-full border-collapse border-t text-sm">
+              <tbody>
+                <tr className="border-b">
+                  <td className="w-28 py-2 pr-4 font-medium">Cliente</td>
+                  <td className="py-2">{submitted.service.business_name}</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2 pr-4 font-medium">Asesor</td>
+                  <td className="py-2">{submitted.advisorName}</td>
+                  <td className="py-2 pr-4 pl-6 font-medium">Fecha</td>
+                  <td className="py-2">{submitted.agreementDate}</td>
+                </tr>
+              </tbody>
+            </table>
 
             <div className="flex flex-col gap-1">
               <p className="font-medium">El asesor:</p>
@@ -208,21 +228,6 @@ export default function CompletionAgreementPage() {
                 promocionales disponibles en los medios impresos y digitales.
               </p>
             </div>
-
-            <table className="w-full border-collapse border-t text-sm">
-              <tbody>
-                <tr className="border-b">
-                  <td className="w-28 py-2 pr-4 font-medium">Cliente</td>
-                  <td className="py-2">{submitted.service.business_name}</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="py-2 pr-4 font-medium">Asesor</td>
-                  <td className="py-2">{submitted.advisorName}</td>
-                  <td className="py-2 pr-4 pl-6 font-medium">Fecha</td>
-                  <td className="py-2">{submitted.agreementDate}</td>
-                </tr>
-              </tbody>
-            </table>
 
             <div className="grid grid-cols-2 gap-6 pt-4">
               <div className="flex flex-col gap-1">
