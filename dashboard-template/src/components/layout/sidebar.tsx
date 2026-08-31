@@ -119,7 +119,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             Formularios
           </button>
           {formsOpen && (
-            <>
+            <div className="ml-3 flex flex-col gap-1 border-l border-sidebar-border pl-2">
               {formNavItems.map((item) => (
                 <NavLink
                   key={item.to}
@@ -127,28 +127,28 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                   onClick={onClose}
                   className={({ isActive }) =>
                     cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      "flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium transition-colors",
                       isActive
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     )
                   }
                 >
-                  <item.icon className="size-4" />
-                  {item.label}
+                  <item.icon className="size-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
                 </NavLink>
               ))}
               {formPlaceholders.map((label) => (
                 <div
                   key={label}
-                  className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/30"
+                  className="flex cursor-not-allowed items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground/30"
                 >
-                  <FileText className="size-4" />
-                  <span className="flex-1">{label}</span>
-                  <span className="text-xs">Próximamente</span>
+                  <FileText className="size-4 shrink-0" />
+                  <span className="flex-1 truncate">{label}</span>
+                  <span className="shrink-0 text-xs">Próximamente</span>
                 </div>
               ))}
-            </>
+            </div>
           )}
 
           {bottomNavItems.map((item) => (
