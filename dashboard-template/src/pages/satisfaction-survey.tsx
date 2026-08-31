@@ -48,7 +48,7 @@ function RadioGroup({
   onChange: (value: string) => void
 }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-wrap gap-x-6 gap-y-2">
       {options.map((option) => (
         <label
           key={option}
@@ -287,6 +287,9 @@ export default function SatisfactionSurveyPage({
                 <RequiredMark />
               </Label>
               <div className="flex items-center gap-4">
+                <span className="text-xs text-muted-foreground">
+                  1 = Nada probable
+                </span>
                 {["1", "2", "3", "4", "5"].map((option) => (
                   <label
                     key={option}
@@ -302,6 +305,9 @@ export default function SatisfactionSurveyPage({
                     {option}
                   </label>
                 ))}
+                <span className="text-xs text-muted-foreground">
+                  5 = Muy probable
+                </span>
               </div>
             </div>
 
