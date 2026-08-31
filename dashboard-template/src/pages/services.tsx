@@ -76,6 +76,7 @@ type ServiceRequest = {
   services: string[]
   referral: string
   referral_other: string | null
+  confidentiality: string | null
   signature: string | null
   status: string
   assigned_advisor_id: string | null
@@ -308,9 +309,19 @@ function dataUrlImageFormat(dataUrl: string) {
   return (match?.[1] ?? "jpeg").toUpperCase()
 }
 
+// Textos calcados de la Sección 2 — Acuerdo y Confidencialidad del
+// formulario de Solicitud de Servicios (service-request.tsx).
+const DECLARATION_TEXT =
+  "Yo declaro bajo juramento que la información proporcionada es verídica. Yo estoy de acuerdo en participar si soy seleccionado para contestar la encuesta de evaluación de los servicios de asesoría recibidos del Centro de Prototipado y Transferencia Tecnológica. Autorizo al MICM y al Centro de Prototipado y Transferencia Tecnológica el uso de mi nombre y domicilio para las encuestas de MICM. Yo autorizo al Centro de Prototipado y Transferencia Tecnológica para proporcionar la información relevante al asesor(a) asignado. Yo entiendo que el asesor(a) ha acordado: 1) no recomendar servicios o bienes en el cual tenga interés personal. 2) no aceptar comisiones o pagos por el asesoramiento. Yo acepto dar un aporte empresarial en aquellos servicios que me ofrezca el Centro de Prototipado y Transferencia Tecnológica y que tengan un costo para mí como empresario."
+
+const CONFIDENTIALITY_TEXT =
+  "El Centro de Prototipado y Transferencia Tecnológica mantendrá estricta confidencialidad e imparcialidad durante la ejecución de los trabajos aquí descritos, así como al término de los mismos. De la misma manera, las informaciones a las que el Centro de Prototipado y Transferencia Tecnológica tendrá acceso directa o indirectamente quedarán sujetas a esta cláusula. El Centro de Prototipado y Transferencia Tecnológica exigirá compromisos de confidencialidad e imparcialidad similares a terceros, auditores y a los que el centro tenga que involucrar para el cumplimiento de los objetivos de esta propuesta. En caso de requerimiento de tipo judicial, ordenado por un juez competente, el Centro de Prototipado y Transferencia Tecnológica quedará liberado de dicha confidencialidad y se contactará al cliente para informarle."
+
 // Genera un PDF con todos los datos del formulario de esta solicitud
 // (no solo lo que cabe en pantalla) — incluye las fotos de cédula y la
-// firma como imágenes reales, no solo enlaces.
+// firma como imágenes reales, no solo enlaces. Todo en dos columnas
+// para que quepa en una sola página en el caso normal; si el contenido
+// es inusualmente largo, sigue paginando en vez de recortarlo.
 async function buildServicePdf(
   request: ServiceRequest,
   advisorName: string,
@@ -319,19 +330,25 @@ async function buildServicePdf(
   const doc = new jsPDF({ unit: "mm", format: "letter" })
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
-  const margin = 20
+  const margin = 14
   const contentWidth = pageWidth - margin * 2
   const bottomLimit = pageHeight - margin
-  let y = margin
+  const colGap = 8
+  const colWidth = (contentWidth - colGap) / 2
+  const leftX = margin
+  const rightX = margin + colWidth + colGap
 
-  function ensureSpace(height: number) {
-    if (y + height > bottomLimit) {
+  type Cursor = { x: number; y: number }
+
+  function ensureSpace(cursor: Cursor, height: number) {
+    if (cursor.y + height > bottomLimit) {
       doc.addPage()
-      y = margin
+      cursor.y = margin
     }
   }
 
   function addField(
+    cursor: Cursor,
     label: string,
     value: string | number | null | undefined
   ) {
@@ -339,136 +356,201 @@ async function buildServicePdf(
       value === null || value === undefined || value === ""
         ? "—"
         : String(value)
-    ensureSpace(5)
+    ensureSpace(cursor, 4)
     doc.setFont("helvetica", "bold")
-    doc.setFontSize(9)
-    doc.text(label, margin, y)
-    y += 4.5
+    doc.setFontSize(7.5)
+    doc.text(label, cursor.x, cursor.y)
+    cursor.y += 3.6
     doc.setFont("helvetica", "normal")
-    doc.setFontSize(10)
-    const lines = doc.splitTextToSize(text, contentWidth)
-    ensureSpace(lines.length * 5)
-    doc.text(lines, margin, y)
-    y += lines.length * 5 + 4
+    doc.setFontSize(9)
+    const lines = doc.splitTextToSize(text, colWidth)
+    ensureSpace(cursor, lines.length * 4)
+    doc.text(lines, cursor.x, cursor.y)
+    cursor.y += lines.length * 4 + 2.5
   }
 
-  function addSectionTitle(title: string) {
-    ensureSpace(12)
+  function addSectionTitle(cursor: Cursor, title: string, width = colWidth) {
+    ensureSpace(cursor, 10)
     doc.setDrawColor(200)
-    doc.line(margin, y, margin + contentWidth, y)
-    y += 6
+    doc.line(cursor.x, cursor.y, cursor.x + width, cursor.y)
+    cursor.y += 5
     doc.setFont("helvetica", "bold")
-    doc.setFontSize(11)
-    doc.text(title, margin, y)
-    y += 7
+    doc.setFontSize(10)
+    doc.text(title, cursor.x, cursor.y)
+    cursor.y += 5.5
   }
 
   const logo = await loadImageDataUrl("/cptt-logo.png")
-  const logoWidth = 60
+  const logoWidth = 45
   const logoHeight = logoWidth / (439 / 109)
-  doc.addImage(logo, "PNG", margin, y, logoWidth, logoHeight)
-  y += logoHeight + 6
+  doc.addImage(logo, "PNG", margin, margin, logoWidth, logoHeight)
 
   doc.setFont("helvetica", "bold")
-  doc.setFontSize(14)
-  doc.text("Solicitud de Servicios", margin, y)
-  y += 6
+  doc.setFontSize(13)
+  doc.text("Solicitud de Servicios", margin + logoWidth + 6, margin + 6)
   doc.setFont("helvetica", "normal")
-  doc.setFontSize(9)
+  doc.setFontSize(8)
   doc.setTextColor(120)
   doc.text(
     `Generado el ${new Date().toLocaleDateString("es-DO")}`,
-    margin,
-    y
+    margin + logoWidth + 6,
+    margin + 11
   )
   doc.setTextColor(0)
-  y += 4
+
+  const startY = margin + logoHeight + 6
+  const left: Cursor = { x: leftX, y: startY }
+  const right: Cursor = { x: rightX, y: startY }
 
   const client = request.clients
 
-  addSectionTitle("Datos del Negocio y del Representante")
-  addField("Asesor encargado", advisorName)
-  addField("Estado del servicio", serviceStatusLabel(request.status))
-  addField("Nombre del Negocio o Emprendimiento", client.business_name)
-  addField("¿Posee RNC?", client.has_rnc === "si" ? "Sí" : "No")
-  if (client.has_rnc === "si") addField("Número de RNC", client.rnc_number)
-  addField("Provincia", client.province)
-  addField("Municipio", client.municipality)
-  addField("Representante", client.representative_name)
-  addField("Sexo", client.sex === "femenino" ? "Femenino" : "Masculino")
-  addField("Edad", client.age)
-  addField("Teléfono", client.phone)
+  addSectionTitle(left, "Datos del Negocio y del Representante")
+  addField(left, "Asesor encargado", advisorName)
+  addField(left, "Estado del servicio", serviceStatusLabel(request.status))
+  addField(left, "Nombre del Negocio o Emprendimiento", client.business_name)
+  addField(left, "¿Posee RNC?", client.has_rnc === "si" ? "Sí" : "No")
+  if (client.has_rnc === "si")
+    addField(left, "Número de RNC", client.rnc_number)
+  addField(left, "Provincia", client.province)
+  addField(left, "Municipio", client.municipality)
+  addField(left, "Representante", client.representative_name)
   addField(
+    left,
+    "Sexo",
+    client.sex === "femenino" ? "Femenino" : "Masculino"
+  )
+  addField(left, "Edad", client.age)
+  addField(left, "Teléfono", client.phone)
+  addField(
+    left,
     "¿Es dueño de la empresa?",
     client.is_owner === "si" ? "Sí" : "No"
   )
-  addField("Número de Cédula de Identidad y Electoral", client.id_number)
-  addField("Correo Electrónico", client.email)
-  addField("Dirección", client.address)
+  addField(left, "Número de Cédula de Identidad y Electoral", client.id_number)
+  addField(left, "Correo Electrónico", client.email)
+  addField(left, "Dirección", client.address)
 
-  addSectionTitle("Datos del Servicio")
+  addSectionTitle(right, "Datos del Servicio")
   addField(
+    right,
     "Sector económico",
     request.sector === "Otro" ? request.sector_other : request.sector
   )
-  addField("Descripción del Negocio", request.business_description)
-  addField("Fecha de inicio de operaciones", request.start_date)
-  addField("Número de empleados", request.employee_count)
-  addField("Servicios solicitados", request.services.join(", "))
+  addField(right, "Descripción del Negocio", request.business_description)
+  addField(right, "Fecha de inicio de operaciones", request.start_date)
+  addField(right, "Número de empleados", request.employee_count)
+  addField(right, "Servicios solicitados", request.services.join(", "))
   addField(
+    right,
     "¿Cómo se enteró de los servicios?",
     request.referral === "Otro" ? request.referral_other : request.referral
   )
-  addField("Fecha de solicitud", formatDate(request.created_at))
+  addField(right, "Fecha de solicitud", formatDate(request.created_at))
+  addField(
+    right,
+    "Confidencialidad",
+    request.confidentiality === "si"
+      ? "Sí"
+      : request.confidentiality === "no"
+        ? "No"
+        : null
+  )
+
+  addSectionTitle(right, "Firma")
+  if (request.signature) {
+    ensureSpace(right, 22)
+    doc.addImage(
+      request.signature,
+      dataUrlImageFormat(request.signature),
+      right.x,
+      right.y,
+      50,
+      20
+    )
+    right.y += 22
+  } else {
+    ensureSpace(right, 5)
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    doc.text("Sin firma", right.x, right.y)
+    right.y += 5
+  }
 
   if (cedulaPhotoUrls.length > 0) {
-    addSectionTitle("Fotografías de la cédula")
-    const photoWidth = 75
-    const photoHeight = 48
-    let x = margin
+    addSectionTitle(right, "Fotografías de la cédula")
+    const photoWidth = (colWidth - 4) / 2
+    const photoHeight = photoWidth * 0.65
+    let x = right.x
 
     for (const url of cedulaPhotoUrls) {
       try {
         const dataUrl = await loadImageDataUrl(url)
-        ensureSpace(photoHeight + 4)
+        ensureSpace(right, photoHeight + 3)
         doc.addImage(
           dataUrl,
           dataUrlImageFormat(dataUrl),
           x,
-          y,
+          right.y,
           photoWidth,
           photoHeight
         )
-        x += photoWidth + 6
-        if (x + photoWidth > margin + contentWidth) {
-          x = margin
-          y += photoHeight + 6
+        x += photoWidth + 4
+        if (x + photoWidth > right.x + colWidth) {
+          x = right.x
+          right.y += photoHeight + 3
         }
       } catch {
         // Si una foto no carga, seguimos con las demás.
       }
     }
-    y += photoHeight + 8
+    right.y += photoHeight + 4
   }
 
-  addSectionTitle("Firma")
-  if (request.signature) {
-    ensureSpace(28)
-    doc.addImage(
-      request.signature,
-      dataUrlImageFormat(request.signature),
-      margin,
-      y,
-      60,
-      24
-    )
-    y += 28
-  } else {
-    ensureSpace(6)
+  const fullWidthCursor: Cursor = { x: margin, y: Math.max(left.y, right.y) }
+
+  function addFullWidthField(cursor: Cursor, label: string, text: string) {
+    ensureSpace(cursor, 4)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(7.5)
+    doc.text(label, cursor.x, cursor.y)
+    cursor.y += 3.4
     doc.setFont("helvetica", "normal")
-    doc.setFontSize(10)
-    doc.text("Sin firma", margin, y)
+    doc.setFontSize(7)
+    const lines = doc.splitTextToSize(text, contentWidth)
+    ensureSpace(cursor, lines.length * 3.2)
+    doc.text(lines, cursor.x, cursor.y)
+    cursor.y += lines.length * 3.2 + 3
   }
+
+  addSectionTitle(
+    fullWidthCursor,
+    "Acuerdo y Confidencialidad",
+    contentWidth
+  )
+  addFullWidthField(fullWidthCursor, "Declaración", DECLARATION_TEXT)
+  addFullWidthField(
+    fullWidthCursor,
+    "Cláusula de confidencialidad",
+    CONFIDENTIALITY_TEXT
+  )
+
+  const footerLogos = await loadImageDataUrl("/logos-institucionales.png")
+  const footerWidthFit = Math.min(55, contentWidth)
+  const footerHeightFit = footerWidthFit / (957 / 281)
+  const spaceLeft = bottomLimit - fullWidthCursor.y
+  const footerWidth =
+    spaceLeft >= footerHeightFit + 2
+      ? footerWidthFit
+      : Math.max(30, spaceLeft * (957 / 281))
+  const footerHeight = footerWidth / (957 / 281)
+  doc.addImage(
+    footerLogos,
+    "PNG",
+    margin + (contentWidth - footerWidth) / 2,
+    fullWidthCursor.y + 2,
+    footerWidth,
+    footerHeight
+  )
 
   return doc
 }
@@ -811,7 +893,7 @@ export default function ServicesPage() {
       const { data, error } = await supabase
         .from("service_requests")
         .select(
-          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, signature, status, assigned_advisor_id, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address, id_photo_paths)"
+          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, confidentiality, signature, status, assigned_advisor_id, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address, id_photo_paths)"
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -1425,52 +1507,57 @@ export default function ServicesPage() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-col items-end gap-2">
               {exportServicePdfError && (
-                <p className="w-full text-right text-sm text-destructive">
+                <p className="text-right text-sm text-destructive">
                   {exportServicePdfError}
                 </p>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleExportServicePdf}
-                disabled={exportingServicePdf}
-              >
-                <FileDown className="size-4" />
-                {exportingServicePdf ? "Generando..." : "Exportar PDF"}
-              </Button>
-              {selected && !selected.signature && (
+              <div className="flex flex-nowrap justify-end gap-1.5">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={handleCopySignLink}
+                  size="sm"
+                  onClick={handleExportServicePdf}
+                  disabled={exportingServicePdf}
                 >
-                  {signLinkCopied ? (
-                    <>
-                      <Check className="size-4" />
-                      Enlace copiado
-                    </>
-                  ) : (
-                    <>
-                      <LinkIcon className="size-4" />
-                      Enviar a firmar
-                    </>
-                  )}
+                  <FileDown className="size-4" />
+                  {exportingServicePdf ? "Generando..." : "Exportar PDF"}
                 </Button>
-              )}
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => setConfirmingDelete(true)}
-              >
-                <Trash2 className="size-4" />
-                Eliminar
-              </Button>
-              <Button type="button" onClick={startEditing}>
-                <Pencil className="size-4" />
-                Editar
-              </Button>
+                {selected && !selected.signature && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopySignLink}
+                  >
+                    {signLinkCopied ? (
+                      <>
+                        <Check className="size-4" />
+                        Copiado
+                      </>
+                    ) : (
+                      <>
+                        <LinkIcon className="size-4" />
+                        Firmar
+                      </>
+                    )}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setConfirmingDelete(true)}
+                >
+                  <Trash2 className="size-4" />
+                  Eliminar
+                </Button>
+                <Button type="button" size="sm" onClick={startEditing}>
+                  <Pencil className="size-4" />
+                  Editar
+                </Button>
+              </div>
             </div>
           )
         }
