@@ -10,7 +10,6 @@ import {
   Briefcase,
   History,
   LogOut,
-  ChevronDown,
   Folder,
   X,
 } from "lucide-react"
@@ -117,13 +116,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           >
             <Folder className="size-4" />
-            <span className="flex-1 text-left">Formularios</span>
-            <ChevronDown
-              className={cn(
-                "size-4 transition-transform",
-                !formsOpen && "-rotate-90"
-              )}
-            />
+            Formularios
           </button>
           {formsOpen && (
             <>
