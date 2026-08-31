@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import * as XLSX from "xlsx"
+import jsPDF from "jspdf"
 import {
   Building2,
   Calendar,
   Check,
   Download,
+  FileDown,
   ImagePlus,
   Link as LinkIcon,
   Mail,
@@ -286,6 +288,191 @@ function downloadXlsx(
   XLSX.writeFile(workbook, filename)
 }
 
+function loadImageDataUrl(url: string): Promise<string> {
+  return fetch(url)
+    .then((res) => res.blob())
+    .then(
+      (blob) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = () =>
+            reject(new Error("No se pudo cargar la imagen"))
+          reader.readAsDataURL(blob)
+        })
+    )
+}
+
+function dataUrlImageFormat(dataUrl: string) {
+  const match = dataUrl.match(/^data:image\/(\w+);/)
+  return (match?.[1] ?? "jpeg").toUpperCase()
+}
+
+// Genera un PDF con todos los datos del formulario de esta solicitud
+// (no solo lo que cabe en pantalla) — incluye las fotos de cédula y la
+// firma como imágenes reales, no solo enlaces.
+async function buildServicePdf(
+  request: ServiceRequest,
+  advisorName: string,
+  cedulaPhotoUrls: string[]
+) {
+  const doc = new jsPDF({ unit: "mm", format: "letter" })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const margin = 20
+  const contentWidth = pageWidth - margin * 2
+  const bottomLimit = pageHeight - margin
+  let y = margin
+
+  function ensureSpace(height: number) {
+    if (y + height > bottomLimit) {
+      doc.addPage()
+      y = margin
+    }
+  }
+
+  function addField(
+    label: string,
+    value: string | number | null | undefined
+  ) {
+    const text =
+      value === null || value === undefined || value === ""
+        ? "—"
+        : String(value)
+    ensureSpace(5)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(9)
+    doc.text(label, margin, y)
+    y += 4.5
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    const lines = doc.splitTextToSize(text, contentWidth)
+    ensureSpace(lines.length * 5)
+    doc.text(lines, margin, y)
+    y += lines.length * 5 + 4
+  }
+
+  function addSectionTitle(title: string) {
+    ensureSpace(12)
+    doc.setDrawColor(200)
+    doc.line(margin, y, margin + contentWidth, y)
+    y += 6
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(11)
+    doc.text(title, margin, y)
+    y += 7
+  }
+
+  const logo = await loadImageDataUrl("/cptt-logo.png")
+  const logoWidth = 60
+  const logoHeight = logoWidth / (439 / 109)
+  doc.addImage(logo, "PNG", margin, y, logoWidth, logoHeight)
+  y += logoHeight + 6
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(14)
+  doc.text("Solicitud de Servicios", margin, y)
+  y += 6
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(9)
+  doc.setTextColor(120)
+  doc.text(
+    `Generado el ${new Date().toLocaleDateString("es-DO")}`,
+    margin,
+    y
+  )
+  doc.setTextColor(0)
+  y += 4
+
+  const client = request.clients
+
+  addSectionTitle("Datos del Negocio y del Representante")
+  addField("Asesor encargado", advisorName)
+  addField("Estado del servicio", serviceStatusLabel(request.status))
+  addField("Nombre del Negocio o Emprendimiento", client.business_name)
+  addField("¿Posee RNC?", client.has_rnc === "si" ? "Sí" : "No")
+  if (client.has_rnc === "si") addField("Número de RNC", client.rnc_number)
+  addField("Provincia", client.province)
+  addField("Municipio", client.municipality)
+  addField("Representante", client.representative_name)
+  addField("Sexo", client.sex === "femenino" ? "Femenino" : "Masculino")
+  addField("Edad", client.age)
+  addField("Teléfono", client.phone)
+  addField(
+    "¿Es dueño de la empresa?",
+    client.is_owner === "si" ? "Sí" : "No"
+  )
+  addField("Número de Cédula de Identidad y Electoral", client.id_number)
+  addField("Correo Electrónico", client.email)
+  addField("Dirección", client.address)
+
+  addSectionTitle("Datos del Servicio")
+  addField(
+    "Sector económico",
+    request.sector === "Otro" ? request.sector_other : request.sector
+  )
+  addField("Descripción del Negocio", request.business_description)
+  addField("Fecha de inicio de operaciones", request.start_date)
+  addField("Número de empleados", request.employee_count)
+  addField("Servicios solicitados", request.services.join(", "))
+  addField(
+    "¿Cómo se enteró de los servicios?",
+    request.referral === "Otro" ? request.referral_other : request.referral
+  )
+  addField("Fecha de solicitud", formatDate(request.created_at))
+
+  if (cedulaPhotoUrls.length > 0) {
+    addSectionTitle("Fotografías de la cédula")
+    const photoWidth = 75
+    const photoHeight = 48
+    let x = margin
+
+    for (const url of cedulaPhotoUrls) {
+      try {
+        const dataUrl = await loadImageDataUrl(url)
+        ensureSpace(photoHeight + 4)
+        doc.addImage(
+          dataUrl,
+          dataUrlImageFormat(dataUrl),
+          x,
+          y,
+          photoWidth,
+          photoHeight
+        )
+        x += photoWidth + 6
+        if (x + photoWidth > margin + contentWidth) {
+          x = margin
+          y += photoHeight + 6
+        }
+      } catch {
+        // Si una foto no carga, seguimos con las demás.
+      }
+    }
+    y += photoHeight + 8
+  }
+
+  addSectionTitle("Firma")
+  if (request.signature) {
+    ensureSpace(28)
+    doc.addImage(
+      request.signature,
+      dataUrlImageFormat(request.signature),
+      margin,
+      y,
+      60,
+      24
+    )
+    y += 28
+  } else {
+    ensureSpace(6)
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.text("Sin firma", margin, y)
+  }
+
+  return doc
+}
+
 function DetailRow({
   label,
   value,
@@ -350,6 +537,27 @@ export default function ServicesPage() {
   >(null)
   const [evidenceUploading, setEvidenceUploading] = useState(false)
   const [evidenceError, setEvidenceError] = useState("")
+  const [exportingServicePdf, setExportingServicePdf] = useState(false)
+  const [exportServicePdfError, setExportServicePdfError] = useState("")
+
+  async function handleExportServicePdf() {
+    if (!selected) return
+
+    setExportingServicePdf(true)
+    setExportServicePdfError("")
+
+    try {
+      const advisorName =
+        staffOptions.find((option) => option.id === selected.assigned_advisor_id)
+          ?.name ?? "Sin asignar"
+      const doc = await buildServicePdf(selected, advisorName, idPhotoUrls ?? [])
+      doc.save(`solicitud-servicio-${selected.clients.business_name}.pdf`)
+    } catch {
+      setExportServicePdfError("No pudimos generar el PDF. Intenta de nuevo.")
+    }
+
+    setExportingServicePdf(false)
+  }
 
   async function loadEvidenceCounts(requestId: string) {
     const { data } = await supabase
@@ -1218,6 +1426,20 @@ export default function ServicesPage() {
             </div>
           ) : (
             <div className="flex flex-wrap justify-end gap-2">
+              {exportServicePdfError && (
+                <p className="w-full text-right text-sm text-destructive">
+                  {exportServicePdfError}
+                </p>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleExportServicePdf}
+                disabled={exportingServicePdf}
+              >
+                <FileDown className="size-4" />
+                {exportingServicePdf ? "Generando..." : "Exportar PDF"}
+              </Button>
               {selected && !selected.signature && (
                 <Button
                   type="button"
