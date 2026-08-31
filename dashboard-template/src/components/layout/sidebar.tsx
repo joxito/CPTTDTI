@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { NavLink, useNavigate } from "react-router-dom"
 import {
   LayoutDashboard,
@@ -9,6 +10,7 @@ import {
   Briefcase,
   History,
   LogOut,
+  ChevronDown,
   X,
 } from "lucide-react"
 
@@ -48,6 +50,7 @@ type SidebarProps = {
 export function Sidebar({ open, onClose }: SidebarProps) {
   const navigate = useNavigate()
   const { staffProfile, signOut } = useAuth()
+  const [formsOpen, setFormsOpen] = useState(true)
 
   async function handleSignOut() {
     await signOut()
@@ -107,37 +110,51 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             </NavLink>
           ))}
 
-          <p className="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/40">
+          <button
+            type="button"
+            onClick={() => setFormsOpen((current) => !current)}
+            className="flex w-full items-center gap-1 px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/40 hover:text-sidebar-foreground/70"
+          >
+            <ChevronDown
+              className={cn(
+                "size-3 transition-transform",
+                !formsOpen && "-rotate-90"
+              )}
+            />
             Formularios
-          </p>
-          {formNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              onClick={onClose}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )
-              }
-            >
-              <item.icon className="size-4" />
-              {item.label}
-            </NavLink>
-          ))}
-          {formPlaceholders.map((label) => (
-            <div
-              key={label}
-              className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/30"
-            >
-              <FileText className="size-4" />
-              <span className="flex-1">{label}</span>
-              <span className="text-xs">Próximamente</span>
-            </div>
-          ))}
+          </button>
+          {formsOpen && (
+            <>
+              {formNavItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )
+                  }
+                >
+                  <item.icon className="size-4" />
+                  {item.label}
+                </NavLink>
+              ))}
+              {formPlaceholders.map((label) => (
+                <div
+                  key={label}
+                  className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/30"
+                >
+                  <FileText className="size-4" />
+                  <span className="flex-1">{label}</span>
+                  <span className="text-xs">Próximamente</span>
+                </div>
+              ))}
+            </>
+          )}
 
           <div className="pt-3">
             {bottomNavItems.map((item) => (
