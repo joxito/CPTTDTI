@@ -592,7 +592,7 @@ export default function ServicesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [requests, setRequests] = useState<ServiceRequest[] | null>(null)
   const [staffOptions, setStaffOptions] = useState<
-    { id: string; name: string; email: string }[]
+    { id: string; name: string; email: string; role: string }[]
   >([])
   const [exportChoiceOpen, setExportChoiceOpen] = useState(false)
   const [error, setError] = useState("")
@@ -1070,7 +1070,7 @@ export default function ServicesPage() {
   useEffect(() => {
     supabase
       .from("staff")
-      .select("id, name, email")
+      .select("id, name, email, role")
       .order("name", { ascending: true })
       .then(({ data }) =>
         setStaffOptions(
@@ -2091,11 +2091,13 @@ export default function ServicesPage() {
                 }
               >
                 <option value="">Sin asignar</option>
-                {staffOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
-                ))}
+                {staffOptions
+                  .filter((option) => option.role === "administrador")
+                  .map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
               </Select>
             </div>
 

@@ -34,6 +34,7 @@ type StaffOption = {
   id: string
   name: string
   signature: string | null
+  role: string
 }
 
 export type Activity = {
@@ -383,7 +384,7 @@ export default function ActionAgreementPage() {
   useEffect(() => {
     supabase
       .from("staff")
-      .select("id, name, signature, email")
+      .select("id, name, signature, role, email")
       .order("name", { ascending: true })
       .then(({ data }) =>
         setStaffOptions(
@@ -401,6 +402,9 @@ export default function ActionAgreementPage() {
   const selectedService = services.find((s) => s.id === selectedServiceId)
   const selectedAdvisor = staffOptions.find((s) => s.id === advisorId)
   const selectedCoordinator = staffOptions.find((s) => s.id === coordinatorId)
+  const coordinatorOptions = staffOptions.filter(
+    (option) => option.role === "administrador"
+  )
   const filledActivities = activities.filter((a) => a.description.trim())
 
   function handleSelectService(label: string) {
@@ -996,7 +1000,7 @@ export default function ActionAgreementPage() {
                     <option value="" disabled>
                       Selecciona una opción
                     </option>
-                    {staffOptions.map((option) => (
+                    {coordinatorOptions.map((option) => (
                       <option key={option.id} value={option.id}>
                         {option.name}
                       </option>
