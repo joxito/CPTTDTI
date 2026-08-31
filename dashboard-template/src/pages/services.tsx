@@ -6,6 +6,7 @@ import {
   Calendar,
   Check,
   Download,
+  ImagePlus,
   Link as LinkIcon,
   Mail,
   MapPin,
@@ -21,7 +22,7 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
@@ -41,6 +42,7 @@ import { regionByProvince, monthNameFromDate, trimesterFromDate } from "@/data/d
 import { CREATOR_EMAIL, useAuth } from "@/hooks/use-auth"
 import { formatCedula, formatPhoneNumber } from "@/lib/format"
 import { supabase } from "@/lib/supabase"
+import { cn } from "@/lib/utils"
 
 type Client = {
   id: string
@@ -339,6 +341,111 @@ export default function ServicesPage() {
     "client"
   )
   const [addingNote, setAddingNote] = useState(false)
+  const [evidenceCounts, setEvidenceCounts] = useState<Map<string, number>>(
+    new Map()
+  )
+  const [evidenceService, setEvidenceService] = useState<string | null>(null)
+  const [evidencePhotos, setEvidencePhotos] = useState<
+    { id: string; path: string; url: string }[] | null
+  >(null)
+  const [evidenceUploading, setEvidenceUploading] = useState(false)
+  const [evidenceError, setEvidenceError] = useState("")
+
+  async function loadEvidenceCounts(requestId: string) {
+    const { data } = await supabase
+      .from("service_evidence_photos")
+      .select("service_label")
+      .eq("service_request_id", requestId)
+
+    const counts = new Map<string, number>()
+    for (const row of data ?? []) {
+      counts.set(row.service_label, (counts.get(row.service_label) ?? 0) + 1)
+    }
+    setEvidenceCounts(counts)
+  }
+
+  async function openEvidenceModal(serviceLabel: string) {
+    if (!selected) return
+
+    setEvidenceService(serviceLabel)
+    setEvidencePhotos(null)
+    setEvidenceError("")
+
+    const { data, error } = await supabase
+      .from("service_evidence_photos")
+      .select("id, photo_path")
+      .eq("service_request_id", selected.id)
+      .eq("service_label", serviceLabel)
+      .order("created_at", { ascending: false })
+
+    if (error || !data || data.length === 0) {
+      setEvidencePhotos([])
+      return
+    }
+
+    const { data: signedUrls } = await supabase.storage
+      .from("evidencia-servicios")
+      .createSignedUrls(
+        data.map((row) => row.photo_path),
+        300
+      )
+
+    setEvidencePhotos(
+      data.map((row, index) => ({
+        id: row.id,
+        path: row.photo_path,
+        url: signedUrls?.[index]?.signedUrl ?? "",
+      }))
+    )
+  }
+
+  function closeEvidenceModal() {
+    setEvidenceService(null)
+    setEvidencePhotos(null)
+    setEvidenceError("")
+  }
+
+  async function handleUploadEvidence(files: FileList | null) {
+    if (!files || files.length === 0 || !selected || !evidenceService) return
+
+    setEvidenceUploading(true)
+    setEvidenceError("")
+
+    for (const file of Array.from(files)) {
+      const extension = file.name.split(".").pop() || "jpg"
+      const path = `${selected.id}/${crypto.randomUUID()}.${extension}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("evidencia-servicios")
+        .upload(path, file, { contentType: file.type })
+
+      if (uploadError) {
+        setEvidenceError("No pudimos subir una de las imágenes.")
+        continue
+      }
+
+      await supabase.from("service_evidence_photos").insert({
+        service_request_id: selected.id,
+        service_label: evidenceService,
+        photo_path: path,
+        uploaded_by: staffProfile?.name ?? "Usuario",
+      })
+    }
+
+    setEvidenceUploading(false)
+    await openEvidenceModal(evidenceService)
+    await loadEvidenceCounts(selected.id)
+  }
+
+  async function handleDeleteEvidence(photoId: string, path: string) {
+    if (!selected || !evidenceService) return
+
+    await supabase.storage.from("evidencia-servicios").remove([path])
+    await supabase.from("service_evidence_photos").delete().eq("id", photoId)
+
+    await openEvidenceModal(evidenceService)
+    await loadEvidenceCounts(selected.id)
+  }
 
   async function loadNotes(request: ServiceRequest) {
     setNotes(null)
@@ -562,6 +669,7 @@ export default function ServicesPage() {
     setNewNoteScope("client")
     loadNotes(request)
     loadIdPhotoUrls(request.clients.id_photo_paths)
+    loadEvidenceCounts(request.id)
   }
 
   // Deep link desde Clientes: /servicios?id=<serviceRequestId> abre ese
@@ -654,6 +762,8 @@ export default function ServicesPage() {
     setNotesError("")
     setNewNoteBody("")
     setIdPhotoUrls(null)
+    setEvidenceCounts(new Map())
+    closeEvidenceModal()
   }
 
   async function handleDelete() {
@@ -1269,11 +1379,30 @@ export default function ServicesPage() {
               label="Servicios solicitados"
               value={
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {selected.services.map((service) => (
-                    <Badge key={service} variant="outline">
-                      {service}
-                    </Badge>
-                  ))}
+                  {selected.services.map((service) => {
+                    const count = evidenceCounts.get(service) ?? 0
+                    return (
+                      <button
+                        key={service}
+                        type="button"
+                        onClick={() => openEvidenceModal(service)}
+                        className="inline-flex"
+                      >
+                        <Badge
+                          variant="outline"
+                          className="cursor-pointer gap-1 hover:bg-accent"
+                        >
+                          <ImagePlus className="size-3" />
+                          {service}
+                          {count > 0 && (
+                            <span className="text-muted-foreground">
+                              ({count})
+                            </span>
+                          )}
+                        </Badge>
+                      </button>
+                    )
+                  })}
                 </div>
               }
             />
@@ -1777,7 +1906,7 @@ export default function ServicesPage() {
       {exportChoiceOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg">
-            <h2 className="text-base font-semibold">Elegí el formato</h2>
+            <h2 className="text-base font-semibold">Elige el formato</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Respeta los filtros que están aplicados en pantalla.
             </p>
@@ -1808,6 +1937,91 @@ export default function ServicesPage() {
                 Cancelar
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {evidenceService && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="flex max-h-[85vh] w-full max-w-lg flex-col gap-4 rounded-lg border bg-background p-6 shadow-lg">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-base font-semibold">Evidencia</h2>
+                <p className="text-sm text-muted-foreground">
+                  {evidenceService}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Cerrar evidencia"
+                onClick={closeEvidenceModal}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {evidencePhotos === null && (
+                <p className="text-sm text-muted-foreground">Cargando...</p>
+              )}
+              {evidencePhotos !== null && evidencePhotos.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Todavía no hay imágenes para este servicio.
+                </p>
+              )}
+              {evidencePhotos !== null && evidencePhotos.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {evidencePhotos.map((photo) => (
+                    <div key={photo.id} className="group relative">
+                      <a href={photo.url} target="_blank" rel="noreferrer">
+                        <img
+                          src={photo.url}
+                          alt="Evidencia del servicio"
+                          className="aspect-square w-full rounded-lg border object-cover"
+                        />
+                      </a>
+                      <button
+                        type="button"
+                        aria-label="Borrar imagen"
+                        onClick={() =>
+                          handleDeleteEvidence(photo.id, photo.path)
+                        }
+                        className="absolute top-1 right-1 rounded-full bg-background/90 p-1 text-muted-foreground opacity-0 shadow-xs transition-opacity group-hover:opacity-100 hover:text-destructive"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {evidenceError && (
+              <p className="text-sm text-destructive">{evidenceError}</p>
+            )}
+
+            <label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                disabled={evidenceUploading}
+                onChange={(event) => handleUploadEvidence(event.target.files)}
+              />
+              <span
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "w-full cursor-pointer",
+                  evidenceUploading && "pointer-events-none opacity-50"
+                )}
+              >
+                <ImagePlus className="size-4" />
+                {evidenceUploading ? "Subiendo..." : "Agregar imagen"}
+              </span>
+            </label>
           </div>
         </div>
       )}
