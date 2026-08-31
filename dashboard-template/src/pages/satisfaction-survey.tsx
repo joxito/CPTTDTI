@@ -335,6 +335,12 @@ export default function SatisfactionSurveyPage({
                 onChange={(event) => setSuggestion(event.target.value)}
               />
             </div>
+
+            <img
+              src="/logos-institucionales.png"
+              alt="Gobierno de la República Dominicana - MICM, OEA, Instituto Politécnico Loyola"
+              className="mx-auto w-full max-w-md"
+            />
           </CardContent>
         </Card>
 
