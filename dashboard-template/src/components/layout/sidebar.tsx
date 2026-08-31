@@ -7,6 +7,7 @@ import {
   Settings,
   ClipboardList,
   FileText,
+  Star,
   Briefcase,
   History,
   LogOut,
@@ -32,9 +33,14 @@ const formNavItems = [
     label: "Solicitud de Servicios",
     icon: ClipboardList,
   },
+  {
+    to: "/encuesta-satisfaccion",
+    label: "Encuesta de Satisfacción",
+    icon: Star,
+  },
 ]
 
-const formPlaceholders = ["Formulario 2", "Formulario 3", "Formulario 4"]
+const formPlaceholders = ["Formulario 3", "Formulario 4"]
 
 const bottomNavItems = [
   { to: "/historial", label: "Historial", icon: History },

@@ -9,6 +9,7 @@ import HistoryPage from "@/pages/history"
 import SettingsPage from "@/pages/settings"
 import UsersPage from "@/pages/users"
 import ServiceRequestPage from "@/pages/service-request"
+import SatisfactionSurveyPage from "@/pages/satisfaction-survey"
 import SignRequestPage from "@/pages/sign-request"
 import LoginPage from "@/pages/login"
 
@@ -22,6 +23,10 @@ export default function App() {
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/servicios" element={<ServicesPage />} />
           <Route path="/solicitud-servicios" element={<ServiceRequestPage />} />
+          <Route
+            path="/encuesta-satisfaccion"
+            element={<SatisfactionSurveyPage />}
+          />
           <Route path="/historial" element={<HistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/usuarios" element={<UsersPage />} />
@@ -30,6 +35,10 @@ export default function App() {
       <Route
         path="/solicitud-servicios/publico"
         element={<ServiceRequestPage standalone />}
+      />
+      <Route
+        path="/encuesta-satisfaccion/publico"
+        element={<SatisfactionSurveyPage standalone />}
       />
       <Route path="/firmar/:id" element={<SignRequestPage />} />
     </Routes>
