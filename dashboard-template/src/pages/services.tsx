@@ -2057,32 +2057,14 @@ export default function ServicesPage() {
             )}
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="edit-status">Estado del servicio</Label>
-              <Select
-                id="edit-status"
-                value={editValues.status}
-                onChange={(event) =>
-                  updateEditValue("status", event.target.value)
-                }
-              >
-                {serviceStatusOptions
-                  .filter((option) => {
-                    if (option.value === editValues.status) return true
-                    if (option.value === "en_proceso")
-                      return editValues.status !== "iniciado"
-                    if (option.value === "completo")
-                      return editValues.status === "completo"
-                    return true
-                  })
-                  .map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-              </Select>
+              <Label>Estado del servicio</Label>
+              <p className="text-sm">
+                {serviceStatusLabel(editValues.status)}
+              </p>
               <p className="text-xs text-muted-foreground">
-                "En proceso" solo se marca desde el Acuerdo de Acciones del
-                Proyecto, y "Completo" desde el Acuerdo de Finalización.
+                El estado lo establece cada formulario: "En proceso" desde
+                el Acuerdo de Acciones del Proyecto, y "Completo" desde el
+                Acuerdo de Finalización.
               </p>
             </div>
 
