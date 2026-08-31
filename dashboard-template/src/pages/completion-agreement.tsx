@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Combobox } from "@/components/ui/combobox"
 import { SignatureCanvas } from "@/components/ui/signature-canvas"
-import { CREATOR_EMAIL } from "@/hooks/use-auth"
+import { CREATOR_EMAIL, useAuth } from "@/hooks/use-auth"
 import { supabase } from "@/lib/supabase"
 
 type ServiceOption = {
@@ -22,6 +22,7 @@ type ServiceOption = {
   client_id: string
   created_at: string
   sector: string
+  status: string
   assigned_advisor_id: string | null
   business_name: string
   representative_name: string
@@ -187,6 +188,7 @@ async function buildAgreementPdf(agreement: SubmittedAgreement) {
 }
 
 export default function CompletionAgreementPage() {
+  const { staffProfile } = useAuth()
   const [services, setServices] = useState<ServiceOption[]>([])
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [selectedServiceId, setSelectedServiceId] = useState("")
@@ -203,8 +205,9 @@ export default function CompletionAgreementPage() {
     supabase
       .from("service_requests")
       .select(
-        "id, client_id, created_at, sector, assigned_advisor_id, clients(business_name, representative_name)"
+        "id, client_id, created_at, sector, status, assigned_advisor_id, clients(business_name, representative_name)"
       )
+      .eq("status", "en_proceso")
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .then(({ data }) => {
@@ -219,6 +222,7 @@ export default function CompletionAgreementPage() {
               client_id: row.client_id,
               created_at: row.created_at,
               sector: row.sector,
+              status: row.status,
               assigned_advisor_id: row.assigned_advisor_id,
               business_name: client.business_name,
               representative_name: client.representative_name,
@@ -271,14 +275,31 @@ export default function CompletionAgreementPage() {
       agreement_date: agreementDate,
     })
 
-    setSubmitting(false)
-
     if (error) {
+      setSubmitting(false)
       setSubmitError(
         "No pudimos guardar el acuerdo. Intenta de nuevo en unos minutos."
       )
       return
     }
+
+    // El acuerdo firmado es lo único que puede marcar un servicio como
+    // completo — no hay forma de ponerlo en "Completo" a mano desde
+    // Servicios (ver services.tsx).
+    await supabase
+      .from("service_requests")
+      .update({ status: "completo" })
+      .eq("id", selectedService.id)
+
+    await supabase.from("service_request_changes").insert({
+      service_request_id: selectedService.id,
+      business_name: selectedService.business_name,
+      action: "editado",
+      changed_fields: { status: { from: "en_proceso", to: "completo" } },
+      actor: staffProfile?.name ?? "Usuario",
+    })
+
+    setSubmitting(false)
 
     setSubmitted({
       service: selectedService,
@@ -445,8 +466,12 @@ export default function CompletionAgreementPage() {
                 onValueChange={handleSelectService}
                 placeholder="Busca por negocio o representante"
                 searchPlaceholder="Buscar servicio..."
+                emptyMessage="No hay servicios en proceso"
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                Solo se muestran los servicios marcados "En proceso".
+              </p>
             </div>
 
             {selectedService && (

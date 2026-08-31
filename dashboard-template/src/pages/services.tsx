@@ -1432,12 +1432,22 @@ export default function ServicesPage() {
                   updateEditValue("status", event.target.value)
                 }
               >
-                {serviceStatusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
+                {serviceStatusOptions
+                  .filter(
+                    (option) =>
+                      option.value !== "completo" ||
+                      editValues.status === "completo"
+                  )
+                  .map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
               </Select>
+              <p className="text-xs text-muted-foreground">
+                "Completo" solo se marca desde el Acuerdo de Finalización de
+                Proyecto.
+              </p>
             </div>
 
             <div className="flex flex-col gap-1.5">
