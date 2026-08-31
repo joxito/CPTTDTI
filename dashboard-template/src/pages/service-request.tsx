@@ -467,7 +467,7 @@ export default function ServiceRequestPage({
                   placeholder={
                     province
                       ? "Selecciona un municipio"
-                      : "Primero seleccioná una provincia"
+                      : "Primero selecciona una provincia"
                   }
                   searchPlaceholder="Buscar municipio..."
                   disabled={!province}

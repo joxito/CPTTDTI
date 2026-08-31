@@ -25,7 +25,7 @@ export function MultiCombobox({
   options,
   values,
   onValuesChange,
-  placeholder = "Seleccioná una o más opciones",
+  placeholder = "Selecciona una o más opciones",
   searchPlaceholder = "Buscar...",
   emptyMessage = "Sin resultados",
   disabled = false,

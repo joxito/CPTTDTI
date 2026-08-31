@@ -23,7 +23,7 @@ export function Combobox({
   options,
   value,
   onValueChange,
-  placeholder = "Seleccioná una opción",
+  placeholder = "Selecciona una opción",
   searchPlaceholder = "Buscar...",
   emptyMessage = "Sin resultados",
   disabled = false,

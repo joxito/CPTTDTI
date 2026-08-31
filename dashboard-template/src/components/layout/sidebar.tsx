@@ -5,6 +5,7 @@ import {
   UserCog,
   Settings,
   ClipboardList,
+  FileText,
   Briefcase,
   History,
   LogOut,
@@ -17,15 +18,23 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/hooks/use-auth"
 import { initialsFromName } from "@/lib/format"
 
-const navItems = [
+const topNavItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/customers", label: "Clientes", icon: Users },
   { to: "/servicios", label: "Servicios", icon: Briefcase },
+]
+
+const formNavItems = [
   {
     to: "/solicitud-servicios",
     label: "Solicitud de Servicios",
     icon: ClipboardList,
   },
+]
+
+const formPlaceholders = ["Formulario 2", "Formulario 3", "Formulario 4"]
+
+const bottomNavItems = [
   { to: "/historial", label: "Historial", icon: History },
   { to: "/usuarios", label: "Usuarios", icon: UserCog },
   { to: "/settings", label: "Configuración", icon: Settings },
@@ -78,7 +87,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-          {navItems.map((item) => (
+          {topNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -97,6 +106,59 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               {item.label}
             </NavLink>
           ))}
+
+          <p className="px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-sidebar-foreground/40">
+            Formularios
+          </p>
+          {formNavItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              onClick={onClose}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )
+              }
+            >
+              <item.icon className="size-4" />
+              {item.label}
+            </NavLink>
+          ))}
+          {formPlaceholders.map((label) => (
+            <div
+              key={label}
+              className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/30"
+            >
+              <FileText className="size-4" />
+              <span className="flex-1">{label}</span>
+              <span className="text-xs">Próximamente</span>
+            </div>
+          ))}
+
+          <div className="pt-3">
+            {bottomNavItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                onClick={onClose}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )
+                }
+              >
+                <item.icon className="size-4" />
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
         </nav>
 
         <div className="border-t border-sidebar-border p-3">
