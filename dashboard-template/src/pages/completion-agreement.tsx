@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import jsPDF from "jspdf"
-import { Download, FileDown, X } from "lucide-react"
+import { FileDown } from "lucide-react"
 
 import {
   Card,
@@ -196,8 +196,6 @@ export default function CompletionAgreementPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submitted, setSubmitted] = useState<SubmittedAgreement | null>(null)
-  const [pdfDoc, setPdfDoc] = useState<jsPDF | null>(null)
-  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null)
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const [pdfError, setPdfError] = useState("")
 
@@ -299,7 +297,7 @@ export default function CompletionAgreementPage() {
     setClientSignature("")
   }
 
-  async function handleOpenPreview() {
+  async function handleExportPdf() {
     if (!submitted) return
 
     setGeneratingPdf(true)
@@ -307,25 +305,12 @@ export default function CompletionAgreementPage() {
 
     try {
       const doc = await buildAgreementPdf(submitted)
-      const url = URL.createObjectURL(doc.output("blob"))
-      setPdfDoc(doc)
-      setPdfPreviewUrl(url)
+      doc.save(`acuerdo-finalizacion-${submitted.service.business_name}.pdf`)
     } catch {
       setPdfError("No pudimos generar el PDF. Intenta de nuevo.")
     }
 
     setGeneratingPdf(false)
-  }
-
-  function handleClosePreview() {
-    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl)
-    setPdfPreviewUrl(null)
-    setPdfDoc(null)
-  }
-
-  function handleDownloadPdf() {
-    if (!pdfDoc || !submitted) return
-    pdfDoc.save(`acuerdo-finalizacion-${submitted.service.business_name}.pdf`)
   }
 
   if (submitted) {
@@ -335,7 +320,7 @@ export default function CompletionAgreementPage() {
           <h1 className="text-2xl font-semibold tracking-tight">
             Acuerdo de Finalización de Proyecto
           </h1>
-          <Button type="button" onClick={handleOpenPreview} disabled={generatingPdf}>
+          <Button type="button" onClick={handleExportPdf} disabled={generatingPdf}>
             <FileDown className="size-4" />
             {generatingPdf ? "Generando..." : "Exportar PDF"}
           </Button>
@@ -430,41 +415,6 @@ export default function CompletionAgreementPage() {
         >
           Crear otro acuerdo
         </Button>
-
-        {pdfPreviewUrl && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="flex max-h-[90vh] w-full max-w-3xl flex-col gap-4 rounded-lg border bg-background p-6 shadow-lg">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold">
-                  Vista previa del acuerdo
-                </h2>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Cerrar"
-                  onClick={handleClosePreview}
-                >
-                  <X className="size-4" />
-                </Button>
-              </div>
-              <iframe
-                src={pdfPreviewUrl}
-                title="Vista previa del PDF"
-                className="h-[70vh] w-full rounded border"
-              />
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={handleClosePreview}>
-                  Cerrar
-                </Button>
-                <Button type="button" onClick={handleDownloadPdf}>
-                  <Download className="size-4" />
-                  Descargar PDF
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     )
   }
