@@ -80,6 +80,7 @@ type ServiceRequest = {
   signature: string | null
   status: string
   assigned_advisor_id: string | null
+  assigned_coordinator_id: string | null
   clients: Client
 }
 
@@ -111,6 +112,7 @@ const SERVICE_FIELD_KEYS = [
   "signature",
   "status",
   "assigned_advisor_id",
+  "assigned_coordinator_id",
 ] as const
 
 type ClientFieldKey = (typeof CLIENT_FIELD_KEYS)[number]
@@ -153,6 +155,7 @@ function toEditableFields(request: ServiceRequest): EditableFields {
     signature: request.signature,
     status: request.status,
     assigned_advisor_id: request.assigned_advisor_id,
+    assigned_coordinator_id: request.assigned_coordinator_id,
   }
 }
 
@@ -179,6 +182,7 @@ function applyEditableFields(
     signature: fields.signature,
     status: fields.status,
     assigned_advisor_id: fields.assigned_advisor_id,
+    assigned_coordinator_id: fields.assigned_coordinator_id,
     clients: {
       ...request.clients,
       business_name: fields.business_name,
@@ -325,6 +329,7 @@ const CONFIDENTIALITY_TEXT =
 async function buildServicePdf(
   request: ServiceRequest,
   advisorName: string,
+  coordinatorName: string,
   cedulaPhotoUrls: string[]
 ) {
   const doc = new jsPDF({ unit: "mm", format: "letter" })
@@ -406,6 +411,7 @@ async function buildServicePdf(
 
   addSectionTitle(left, "Datos del Negocio y del Representante")
   addField(left, "Asesor encargado", advisorName)
+  addField(left, "Coordinador(a) encargado", coordinatorName)
   addField(left, "Estado del servicio", serviceStatusLabel(request.status))
   addField(left, "Nombre del Negocio o Emprendimiento", client.business_name)
   addField(left, "¿Posee RNC?", client.has_rnc === "si" ? "Sí" : "No")
@@ -632,7 +638,16 @@ export default function ServicesPage() {
       const advisorName =
         staffOptions.find((option) => option.id === selected.assigned_advisor_id)
           ?.name ?? "Sin asignar"
-      const doc = await buildServicePdf(selected, advisorName, idPhotoUrls ?? [])
+      const coordinatorName =
+        staffOptions.find(
+          (option) => option.id === selected.assigned_coordinator_id
+        )?.name ?? "Sin asignar"
+      const doc = await buildServicePdf(
+        selected,
+        advisorName,
+        coordinatorName,
+        idPhotoUrls ?? []
+      )
       doc.save(`solicitud-servicio-${selected.clients.business_name}.pdf`)
     } catch {
       setExportServicePdfError("No pudimos generar el PDF. Intenta de nuevo.")
@@ -893,7 +908,7 @@ export default function ServicesPage() {
       const { data, error } = await supabase
         .from("service_requests")
         .select(
-          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, confidentiality, signature, status, assigned_advisor_id, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address, id_photo_paths)"
+          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, confidentiality, signature, status, assigned_advisor_id, assigned_coordinator_id, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address, id_photo_paths)"
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -1583,6 +1598,14 @@ export default function ServicesPage() {
               }
             />
             <DetailRow
+              label="Coordinador(a) encargado"
+              value={
+                staffOptions.find(
+                  (option) => option.id === selected.assigned_coordinator_id
+                )?.name ?? "Sin asignar"
+              }
+            />
+            <DetailRow
               label="Nombre del Negocio o Emprendimiento"
               value={selected.clients.business_name}
             />
@@ -1871,11 +1894,14 @@ export default function ServicesPage() {
                 }
               >
                 {serviceStatusOptions
-                  .filter(
-                    (option) =>
-                      option.value !== "completo" ||
-                      editValues.status === "completo"
-                  )
+                  .filter((option) => {
+                    if (option.value === editValues.status) return true
+                    if (option.value === "en_proceso")
+                      return editValues.status !== "iniciado"
+                    if (option.value === "completo")
+                      return editValues.status === "completo"
+                    return true
+                  })
                   .map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -1883,8 +1909,8 @@ export default function ServicesPage() {
                   ))}
               </Select>
               <p className="text-xs text-muted-foreground">
-                "Completo" solo se marca desde el Acuerdo de Finalización de
-                Proyecto.
+                "En proceso" solo se marca desde el Acuerdo de Acciones del
+                Proyecto, y "Completo" desde el Acuerdo de Finalización.
               </p>
             </div>
 
@@ -1896,6 +1922,27 @@ export default function ServicesPage() {
                 onChange={(event) =>
                   updateEditValue(
                     "assigned_advisor_id",
+                    event.target.value || null
+                  )
+                }
+              >
+                <option value="">Sin asignar</option>
+                {staffOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-coordinator">Coordinador(a) encargado</Label>
+              <Select
+                id="edit-coordinator"
+                value={editValues.assigned_coordinator_id ?? ""}
+                onChange={(event) =>
+                  updateEditValue(
+                    "assigned_coordinator_id",
                     event.target.value || null
                   )
                 }

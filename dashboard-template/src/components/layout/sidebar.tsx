@@ -6,6 +6,7 @@ import {
   UserCog,
   Settings,
   ClipboardList,
+  ClipboardCheck,
   FileText,
   Star,
   FileSignature,
@@ -35,18 +36,23 @@ const formNavItems = [
     icon: ClipboardList,
   },
   {
-    to: "/encuesta-satisfaccion",
-    label: "Encuesta de Satisfacción",
-    icon: Star,
+    to: "/acuerdo-acciones",
+    label: "Acuerdo de Acciones",
+    icon: ClipboardCheck,
   },
   {
     to: "/acuerdo-finalizacion",
     label: "Acuerdo de Finalización",
     icon: FileSignature,
   },
+  {
+    to: "/encuesta-satisfaccion",
+    label: "Encuesta de Satisfacción",
+    icon: Star,
+  },
 ]
 
-const formPlaceholders = ["Formulario 4"]
+const formPlaceholders: string[] = []
 
 const bottomNavItems = [
   { to: "/historial", label: "Historial", icon: History },
