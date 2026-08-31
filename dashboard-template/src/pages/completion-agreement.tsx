@@ -175,6 +175,12 @@ export default function CompletionAgreementPage() {
 
         <Card className="print:border-none print:shadow-none">
           <CardContent className="flex flex-col gap-6 py-8">
+            <img
+              src="/cptt-logo.png"
+              alt="CPTTL"
+              className="mx-auto w-[min(90%,320px)]"
+            />
+
             <div className="flex flex-col gap-1">
               <p className="font-medium">El asesor:</p>
               <p className="text-sm text-muted-foreground">
@@ -203,47 +209,47 @@ export default function CompletionAgreementPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-6 border-t pt-6">
-              <div>
-                <Label className="text-muted-foreground">Cliente</Label>
-                <p className="text-sm font-medium">
-                  {submitted.service.business_name}
-                </p>
-              </div>
-              <div className="flex flex-col gap-3">
-                <div>
-                  <Label className="text-muted-foreground">Asesor</Label>
-                  <p className="text-sm font-medium">
-                    {submitted.advisorName}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Fecha</Label>
-                  <p className="text-sm font-medium">
-                    {submitted.agreementDate}
-                  </p>
-                </div>
-              </div>
-            </div>
+            <table className="w-full border-collapse border-t text-sm">
+              <tbody>
+                <tr className="border-b">
+                  <td className="w-28 py-2 pr-4 font-medium">Cliente</td>
+                  <td className="py-2">{submitted.service.business_name}</td>
+                </tr>
+                <tr className="border-b">
+                  <td className="py-2 pr-4 font-medium">Asesor</td>
+                  <td className="py-2">{submitted.advisorName}</td>
+                  <td className="py-2 pr-4 pl-6 font-medium">Fecha</td>
+                  <td className="py-2">{submitted.agreementDate}</td>
+                </tr>
+              </tbody>
+            </table>
 
-            <div className="grid grid-cols-2 gap-6">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-muted-foreground">Firma Asesor</Label>
+            <div className="grid grid-cols-2 gap-6 pt-4">
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-medium">Firma Asesor</p>
                 <img
                   src={submitted.advisorSignature}
                   alt="Firma del asesor"
-                  className="h-24 rounded-lg border bg-white p-2"
+                  className="-mb-3 h-16 self-center object-contain"
                 />
+                <div className="border-t" />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-muted-foreground">Firma Cliente</Label>
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-medium">Firma Cliente</p>
                 <img
                   src={submitted.clientSignature}
                   alt="Firma del cliente"
-                  className="h-24 rounded-lg border bg-white p-2"
+                  className="-mb-3 h-16 self-center object-contain"
                 />
+                <div className="border-t" />
               </div>
             </div>
+
+            <img
+              src="/logos-institucionales.png"
+              alt="Gobierno de la República Dominicana - MICM, OEA, Instituto Politécnico Loyola"
+              className="mx-auto mt-4 w-full max-w-md"
+            />
           </CardContent>
         </Card>
 
