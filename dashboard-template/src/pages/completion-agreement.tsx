@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import { Printer } from "lucide-react"
+import jsPDF from "jspdf"
+import { Download, FileDown, X } from "lucide-react"
 
 import {
   Card,
@@ -51,6 +52,140 @@ type SubmittedAgreement = {
   agreementDate: string
 }
 
+function loadImageDataUrl(url: string): Promise<string> {
+  return fetch(url)
+    .then((res) => res.blob())
+    .then(
+      (blob) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = () => reject(new Error("No se pudo cargar la imagen"))
+          reader.readAsDataURL(blob)
+        })
+    )
+}
+
+const CLIENT_STATEMENTS = [
+  "Se encuentra conforme con los entregables del proyecto realizado.",
+  "Se compromete a proveer información necesaria para que el Centro de Prototipado y Transferencia Tecnológica pueda realizar la Encuesta de Evaluación del Impacto Económico generado a través de la asesoría recibida.",
+  "Autoriza al Centro de Prototipado y Transferencia Tecnológica a utilizar su testimonio en los soportes publicitarios y/o promocionales disponibles en los medios impresos y digitales.",
+]
+
+// Genera el PDF a mano (en vez de imprimir el HTML) para que el
+// documento no lleve el encabezado/pie que agrega el navegador al
+// imprimir (URL, fecha, título de la página).
+async function buildAgreementPdf(agreement: SubmittedAgreement) {
+  const doc = new jsPDF({ unit: "mm", format: "letter" })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const margin = 20
+  const contentWidth = pageWidth - margin * 2
+  let y = 18
+
+  const [logo, footerLogos] = await Promise.all([
+    loadImageDataUrl("/cptt-logo.png"),
+    loadImageDataUrl("/logos-institucionales.png"),
+  ])
+
+  const logoWidth = 70
+  const logoHeight = logoWidth / (439 / 109)
+  doc.addImage(logo, "PNG", (pageWidth - logoWidth) / 2, y, logoWidth, logoHeight)
+  y += logoHeight + 8
+
+  doc.setDrawColor(200)
+  doc.line(margin, y, margin + contentWidth, y)
+  y += 6
+  doc.setFontSize(10)
+  doc.setFont("helvetica", "bold")
+  doc.text("Cliente", margin, y)
+  doc.setFont("helvetica", "normal")
+  doc.text(agreement.service.business_name, margin + 25, y)
+  y += 4
+  doc.line(margin, y, margin + contentWidth, y)
+  y += 6
+  doc.setFont("helvetica", "bold")
+  doc.text("Asesor", margin, y)
+  doc.setFont("helvetica", "normal")
+  doc.text(agreement.advisorName, margin + 25, y)
+  doc.setFont("helvetica", "bold")
+  doc.text("Fecha", margin + 95, y)
+  doc.setFont("helvetica", "normal")
+  doc.text(agreement.agreementDate, margin + 115, y)
+  y += 4
+  doc.line(margin, y, margin + contentWidth, y)
+  y += 12
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(11)
+  doc.text("El asesor:", margin, y)
+  y += 6
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(10)
+  const advisorLines = doc.splitTextToSize(
+    "Indica que ha completado las actividades acordadas en el documento Acuerdo de Acciones de su proyecto, en el tiempo y alcance esperado.",
+    contentWidth
+  )
+  doc.text(advisorLines, margin, y)
+  y += advisorLines.length * 5 + 8
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(11)
+  doc.text("El cliente:", margin, y)
+  y += 6
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(10)
+  for (const statement of CLIENT_STATEMENTS) {
+    const lines = doc.splitTextToSize(statement, contentWidth)
+    doc.text(lines, margin, y)
+    y += lines.length * 5 + 3
+  }
+  y += 10
+
+  const sigColWidth = contentWidth / 2 - 5
+  const sigHeight = 18
+  const sigWidth = Math.min(sigHeight * (500 / 200), sigColWidth)
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(10)
+  doc.text("Firma Asesor", margin, y)
+  doc.text("Firma Cliente", margin + sigColWidth + 10, y)
+  y += 3
+
+  doc.addImage(agreement.advisorSignature, "PNG", margin, y, sigWidth, sigHeight)
+  doc.addImage(
+    agreement.clientSignature,
+    "PNG",
+    margin + sigColWidth + 10,
+    y,
+    sigWidth,
+    sigHeight
+  )
+  y += sigHeight + 2
+
+  doc.setDrawColor(200)
+  doc.line(margin, y, margin + sigColWidth, y)
+  doc.line(
+    margin + sigColWidth + 10,
+    y,
+    margin + sigColWidth + 10 + sigColWidth,
+    y
+  )
+
+  const footerWidth = 110
+  const footerHeight = footerWidth / (957 / 281)
+  doc.addImage(
+    footerLogos,
+    "PNG",
+    (pageWidth - footerWidth) / 2,
+    pageHeight - footerHeight - 15,
+    footerWidth,
+    footerHeight
+  )
+
+  return doc
+}
+
 export default function CompletionAgreementPage() {
   const [services, setServices] = useState<ServiceOption[]>([])
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
@@ -61,6 +196,10 @@ export default function CompletionAgreementPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submitted, setSubmitted] = useState<SubmittedAgreement | null>(null)
+  const [pdfDoc, setPdfDoc] = useState<jsPDF | null>(null)
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null)
+  const [generatingPdf, setGeneratingPdf] = useState(false)
+  const [pdfError, setPdfError] = useState("")
 
   useEffect(() => {
     supabase
@@ -160,25 +299,50 @@ export default function CompletionAgreementPage() {
     setClientSignature("")
   }
 
+  async function handleOpenPreview() {
+    if (!submitted) return
+
+    setGeneratingPdf(true)
+    setPdfError("")
+
+    try {
+      const doc = await buildAgreementPdf(submitted)
+      const url = URL.createObjectURL(doc.output("blob"))
+      setPdfDoc(doc)
+      setPdfPreviewUrl(url)
+    } catch {
+      setPdfError("No pudimos generar el PDF. Intenta de nuevo.")
+    }
+
+    setGeneratingPdf(false)
+  }
+
+  function handleClosePreview() {
+    if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl)
+    setPdfPreviewUrl(null)
+    setPdfDoc(null)
+  }
+
+  function handleDownloadPdf() {
+    if (!pdfDoc || !submitted) return
+    pdfDoc.save(`acuerdo-finalizacion-${submitted.service.business_name}.pdf`)
+  }
+
   if (submitted) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
-        <div className="flex items-center justify-between gap-4 print:hidden">
+        <div className="flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold tracking-tight">
             Acuerdo de Finalización de Proyecto
           </h1>
-          <Button type="button" onClick={() => window.print()}>
-            <Printer className="size-4" />
-            Exportar / Imprimir
+          <Button type="button" onClick={handleOpenPreview} disabled={generatingPdf}>
+            <FileDown className="size-4" />
+            {generatingPdf ? "Generando..." : "Exportar PDF"}
           </Button>
         </div>
-        <p className="text-sm text-muted-foreground print:hidden">
-          En la ventana de impresión, abre "Más ajustes" y desmarca
-          "Encabezados y pies de página" para que no salga la URL ni la
-          fecha del navegador.
-        </p>
+        {pdfError && <p className="text-sm text-destructive">{pdfError}</p>}
 
-        <Card className="print:border-none print:shadow-none">
+        <Card>
           <CardContent className="flex flex-col gap-6 py-8">
             <img
               src="/cptt-logo.png"
@@ -262,10 +426,45 @@ export default function CompletionAgreementPage() {
           type="button"
           variant="outline"
           onClick={handleNewAgreement}
-          className="self-start print:hidden"
+          className="self-start"
         >
           Crear otro acuerdo
         </Button>
+
+        {pdfPreviewUrl && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="flex max-h-[90vh] w-full max-w-3xl flex-col gap-4 rounded-lg border bg-background p-6 shadow-lg">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold">
+                  Vista previa del acuerdo
+                </h2>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Cerrar"
+                  onClick={handleClosePreview}
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+              <iframe
+                src={pdfPreviewUrl}
+                title="Vista previa del PDF"
+                className="h-[70vh] w-full rounded border"
+              />
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={handleClosePreview}>
+                  Cerrar
+                </Button>
+                <Button type="button" onClick={handleDownloadPdf}>
+                  <Download className="size-4" />
+                  Descargar PDF
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
