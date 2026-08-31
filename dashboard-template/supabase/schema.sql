@@ -526,13 +526,17 @@ grant execute on function restore_service_request(uuid) to authenticated;
 -- empresa como texto libre. Por ahora solo se guardan las respuestas;
 -- todavía no hay pantalla para verlas, así que no se agrega política
 -- de lectura (RLS queda activo sin políticas, solo la función abajo
--- puede insertar).
+-- puede insertar). service_request_id es opcional: se usa cuando el
+-- asesor envía la encuesta desde un servicio ya "Completo", generando
+-- un enlace público por servicio (mismo patrón que /firmar/:id) — la
+-- encuesta general sin vincular sigue existiendo tal cual.
 create table satisfaction_surveys (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
 
   email text not null,
   business_name text not null,
+  service_request_id uuid references service_requests (id),
 
   overall_rating text not null
     check (overall_rating in ('Excelente', 'Muy bueno', 'Bueno', 'Regular', 'Deficiente')),
@@ -560,7 +564,7 @@ begin
   insert into satisfaction_surveys (
     email, business_name, overall_rating, staff_knowledge_satisfaction,
     response_time_satisfaction, recommend_likelihood, suggested_referrals,
-    suggestion
+    suggestion, service_request_id
   )
   values (
     p_survey ->> 'email',
@@ -570,7 +574,8 @@ begin
     p_survey ->> 'response_time_satisfaction',
     (p_survey ->> 'recommend_likelihood')::int,
     p_survey ->> 'suggested_referrals',
-    p_survey ->> 'suggestion'
+    p_survey ->> 'suggestion',
+    nullif(p_survey ->> 'service_request_id', '')::uuid
   )
   returning id into v_id;
 
@@ -579,6 +584,25 @@ end;
 $$;
 
 grant execute on function submit_satisfaction_survey(jsonb) to anon, authenticated;
+
+-- Lectura pública mínima para precargar el nombre del negocio cuando
+-- la encuesta se abre desde un enlace vinculado a un servicio — mismo
+-- patrón que get_signing_info.
+create or replace function get_survey_link_info(p_request_id uuid)
+returns table (
+  business_name text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select c.business_name
+  from service_requests sr
+  join clients c on c.id = sr.client_id
+  where sr.id = p_request_id and sr.deleted_at is null;
+$$;
+
+grant execute on function get_survey_link_info(uuid) to anon, authenticated;
 
 -- Acuerdo de Finalización de Proyecto (CPTTAPR03): el asesor y el
 -- cliente firman en persona cuando se cierra un servicio. La firma del

@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useParams } from "react-router-dom"
 import { Check, CheckCircle2, Link as LinkIcon } from "lucide-react"
 
 import {
@@ -75,6 +76,7 @@ type SatisfactionSurveyPageProps = {
 export default function SatisfactionSurveyPage({
   standalone = false,
 }: SatisfactionSurveyPageProps) {
+  const { id: linkedServiceId } = useParams<{ id: string }>()
   const [submitted, setSubmitted] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -88,6 +90,18 @@ export default function SatisfactionSurveyPage({
   const [recommendLikelihood, setRecommendLikelihood] = useState("")
   const [suggestedReferrals, setSuggestedReferrals] = useState("")
   const [suggestion, setSuggestion] = useState("")
+
+  useEffect(() => {
+    if (!linkedServiceId) return
+
+    supabase
+      .rpc("get_survey_link_info", { p_request_id: linkedServiceId })
+      .single()
+      .then(({ data }) => {
+        const info = data as { business_name: string } | null
+        if (info) setBusinessName(info.business_name)
+      })
+  }, [linkedServiceId])
 
   async function handleCopyLink() {
     const publicUrl = `${window.location.origin}/encuesta-satisfaccion/publico`
@@ -128,6 +142,7 @@ export default function SatisfactionSurveyPage({
         recommend_likelihood: Number(recommendLikelihood),
         suggested_referrals: suggestedReferrals || null,
         suggestion: suggestion || null,
+        service_request_id: linkedServiceId || null,
       },
     })
 
@@ -225,6 +240,10 @@ export default function SatisfactionSurveyPage({
                 name="businessName"
                 value={businessName}
                 onChange={(event) => setBusinessName(event.target.value)}
+                readOnly={Boolean(linkedServiceId)}
+                className={
+                  linkedServiceId ? "bg-muted text-muted-foreground" : undefined
+                }
                 required
               />
             </div>

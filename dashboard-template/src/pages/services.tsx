@@ -616,6 +616,7 @@ export default function ServicesPage() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
   const [signLinkCopied, setSignLinkCopied] = useState(false)
+  const [surveyLinkCopied, setSurveyLinkCopied] = useState(false)
   const [idPhotoUrls, setIdPhotoUrls] = useState<string[] | null>(null)
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [notesError, setNotesError] = useState("")
@@ -1037,6 +1038,14 @@ export default function ServicesPage() {
     await navigator.clipboard.writeText(signUrl)
     setSignLinkCopied(true)
     setTimeout(() => setSignLinkCopied(false), 2000)
+  }
+
+  async function handleCopySurveyLink() {
+    if (!selected) return
+    const surveyUrl = `${window.location.origin}/encuesta-satisfaccion/publico/${selected.id}`
+    await navigator.clipboard.writeText(surveyUrl)
+    setSurveyLinkCopied(true)
+    setTimeout(() => setSurveyLinkCopied(false), 2000)
   }
 
   useEffect(() => {
@@ -1698,6 +1707,26 @@ export default function ServicesPage() {
                       <>
                         <LinkIcon className="size-4" />
                         Firmar
+                      </>
+                    )}
+                  </Button>
+                )}
+                {selected && selected.status === "completo" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopySurveyLink}
+                  >
+                    {surveyLinkCopied ? (
+                      <>
+                        <Check className="size-4" />
+                        Copiado
+                      </>
+                    ) : (
+                      <>
+                        <LinkIcon className="size-4" />
+                        Encuesta
                       </>
                     )}
                   </Button>

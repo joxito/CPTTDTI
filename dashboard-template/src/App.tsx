@@ -50,6 +50,10 @@ export default function App() {
         path="/encuesta-satisfaccion/publico"
         element={<SatisfactionSurveyPage standalone />}
       />
+      <Route
+        path="/encuesta-satisfaccion/publico/:id"
+        element={<SatisfactionSurveyPage standalone />}
+      />
       <Route path="/firmar/:id" element={<SignRequestPage />} />
     </Routes>
   )
