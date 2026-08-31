@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PhotoCropModal } from "@/components/ui/photo-crop-modal"
+import { SignatureCanvas } from "@/components/ui/signature-canvas"
 import { useAuth } from "@/hooks/use-auth"
 import { initialsFromName } from "@/lib/format"
 import { supabase } from "@/lib/supabase"
@@ -22,6 +23,11 @@ export default function SettingsPage() {
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileMessage, setProfileMessage] = useState("")
   const [profileError, setProfileError] = useState("")
+
+  const [signature, setSignature] = useState(staffProfile?.signature ?? "")
+  const [savingSignature, setSavingSignature] = useState(false)
+  const [signatureMessage, setSignatureMessage] = useState("")
+  const [signatureError, setSignatureError] = useState("")
 
   const [oldPassword, setOldPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -72,6 +78,30 @@ export default function SettingsPage() {
     setEditingProfile(false)
     setProfileMessage("Perfil actualizado.")
     setTimeout(() => setProfileMessage(""), 2000)
+  }
+
+  async function handleSaveSignature() {
+    if (!session) return
+
+    setSavingSignature(true)
+    setSignatureError("")
+    setSignatureMessage("")
+
+    const { error } = await supabase
+      .from("staff")
+      .update({ signature: signature || null })
+      .eq("id", session.user.id)
+
+    setSavingSignature(false)
+
+    if (error) {
+      setSignatureError("No pudimos guardar la firma.")
+      return
+    }
+
+    await refreshStaffProfile()
+    setSignatureMessage("Firma actualizada.")
+    setTimeout(() => setSignatureMessage(""), 2000)
   }
 
   async function handleChangePassword() {
@@ -205,6 +235,38 @@ export default function SettingsPage() {
               </Button>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Firma</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 pb-6">
+          <p className="text-sm text-muted-foreground">
+            Se usa para completar el Acuerdo de Finalización de Proyecto
+            cuando te asignan como asesor encargado.
+          </p>
+          <SignatureCanvas
+            value={signature}
+            onChange={setSignature}
+            className="max-w-md"
+          />
+
+          {signatureError && (
+            <p className="text-sm text-destructive">{signatureError}</p>
+          )}
+          {signatureMessage && (
+            <p className="text-sm text-success">{signatureMessage}</p>
+          )}
+
+          <Button
+            onClick={handleSaveSignature}
+            disabled={savingSignature}
+            className="self-start"
+          >
+            {savingSignature ? "Guardando..." : "Guardar firma"}
+          </Button>
         </CardContent>
       </Card>
 

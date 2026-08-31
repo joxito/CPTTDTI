@@ -8,6 +8,7 @@ import {
   ClipboardList,
   FileText,
   Star,
+  FileSignature,
   Briefcase,
   History,
   LogOut,
@@ -38,9 +39,14 @@ const formNavItems = [
     label: "Encuesta de Satisfacción",
     icon: Star,
   },
+  {
+    to: "/acuerdo-finalizacion",
+    label: "Acuerdo de Finalización",
+    icon: FileSignature,
+  },
 ]
 
-const formPlaceholders = ["Formulario 3", "Formulario 4"]
+const formPlaceholders = ["Formulario 4"]
 
 const bottomNavItems = [
   { to: "/historial", label: "Historial", icon: History },
@@ -76,7 +82,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-sidebar text-sidebar-foreground transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-sidebar text-sidebar-foreground transition-transform print:hidden lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >

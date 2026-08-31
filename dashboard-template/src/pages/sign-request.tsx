@@ -143,7 +143,7 @@ export default function SignRequestPage() {
                   </CardDescription>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Dibujá tu firma en el recuadro de abajo para confirmar tu
+                  Dibuja tu firma en el recuadro de abajo para confirmar tu
                   solicitud de servicios al CPTTL.
                 </p>
                 <SignatureCanvas value={signature} onChange={setSignature} />

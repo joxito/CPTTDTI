@@ -10,6 +10,7 @@ import SettingsPage from "@/pages/settings"
 import UsersPage from "@/pages/users"
 import ServiceRequestPage from "@/pages/service-request"
 import SatisfactionSurveyPage from "@/pages/satisfaction-survey"
+import CompletionAgreementPage from "@/pages/completion-agreement"
 import SignRequestPage from "@/pages/sign-request"
 import LoginPage from "@/pages/login"
 
@@ -26,6 +27,10 @@ export default function App() {
           <Route
             path="/encuesta-satisfaccion"
             element={<SatisfactionSurveyPage />}
+          />
+          <Route
+            path="/acuerdo-finalizacion"
+            element={<CompletionAgreementPage />}
           />
           <Route path="/historial" element={<HistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
