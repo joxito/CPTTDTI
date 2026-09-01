@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Copy, Plus, RefreshCw, Trash2, UserCog } from "lucide-react"
+import { Copy, Eye, EyeOff, Plus, RefreshCw, Trash2, UserCog } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -65,6 +65,7 @@ export default function UsersPage() {
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [passwordCopied, setPasswordCopied] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState("")
 
@@ -81,6 +82,7 @@ export default function UsersPage() {
   const [resetPassword, setResetPassword] = useState("")
   const [resetConfirmPassword, setResetConfirmPassword] = useState("")
   const [resetPasswordCopied, setResetPasswordCopied] = useState(false)
+  const [showResetPassword, setShowResetPassword] = useState(false)
   const [resettingPassword, setResettingPassword] = useState(false)
   const [resetError, setResetError] = useState("")
   const [resetMessage, setResetMessage] = useState("")
@@ -113,6 +115,7 @@ export default function UsersPage() {
     setNewPassword(password)
     setConfirmPassword(password)
     setCreateError("")
+    setShowNewPassword(false)
     setAddOpen(true)
   }
 
@@ -168,6 +171,7 @@ export default function UsersPage() {
     setResetConfirmPassword("")
     setResetError("")
     setResetMessage("")
+    setShowResetPassword(false)
   }
 
   function closeEditSheet() {
@@ -411,10 +415,26 @@ export default function UsersPage() {
             <div className="flex gap-2">
               <Input
                 id="new-user-password"
+                type={showNewPassword ? "text" : "password"}
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
                 className="font-mono"
               />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label={
+                  showNewPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                }
+                onClick={() => setShowNewPassword((current) => !current)}
+              >
+                {showNewPassword ? (
+                  <EyeOff className="size-4" />
+                ) : (
+                  <Eye className="size-4" />
+                )}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -445,6 +465,7 @@ export default function UsersPage() {
             </Label>
             <Input
               id="new-user-confirm-password"
+              type={showNewPassword ? "text" : "password"}
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
               className="font-mono"
@@ -547,10 +568,28 @@ export default function UsersPage() {
                 <div className="flex gap-2">
                   <Input
                     id="reset-password"
+                    type={showResetPassword ? "text" : "password"}
                     value={resetPassword}
                     onChange={(event) => setResetPassword(event.target.value)}
                     className="font-mono"
                   />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={
+                      showResetPassword
+                        ? "Ocultar contraseña"
+                        : "Mostrar contraseña"
+                    }
+                    onClick={() => setShowResetPassword((current) => !current)}
+                  >
+                    {showResetPassword ? (
+                      <EyeOff className="size-4" />
+                    ) : (
+                      <Eye className="size-4" />
+                    )}
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
@@ -581,6 +620,7 @@ export default function UsersPage() {
                 </Label>
                 <Input
                   id="reset-confirm-password"
+                  type={showResetPassword ? "text" : "password"}
                   value={resetConfirmPassword}
                   onChange={(event) =>
                     setResetConfirmPassword(event.target.value)
