@@ -15,6 +15,7 @@ import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Combobox } from "@/components/ui/combobox"
 import { SignatureCanvas } from "@/components/ui/signature-canvas"
+import { serviceOptions } from "@/data/service-request-options"
 import { CREATOR_EMAIL, useAuth } from "@/hooks/use-auth"
 import { supabase } from "@/lib/supabase"
 
@@ -330,6 +331,7 @@ export default function ActionAgreementPage() {
   const [coordinatorId, setCoordinatorId] = useState("")
   const [projectName, setProjectName] = useState("")
   const [serviceType, setServiceType] = useState("")
+  const [serviceTypeOther, setServiceTypeOther] = useState("")
   const [serviceQuantity, setServiceQuantity] = useState("")
   const [estimatedCompletionTime, setEstimatedCompletionTime] = useState("")
   const [identifiedNeed, setIdentifiedNeed] = useState("")
@@ -406,6 +408,8 @@ export default function ActionAgreementPage() {
     (option) => option.role === "administrador"
   )
   const filledActivities = activities.filter((a) => a.description.trim())
+  const resolvedServiceType =
+    serviceType === "Otro" ? serviceTypeOther.trim() : serviceType
 
   function handleSelectService(label: string) {
     const service = serviceOptionsMap.get(label)
@@ -439,7 +443,7 @@ export default function ActionAgreementPage() {
     const { error } = await supabase.from("project_action_agreements").insert({
       service_request_id: selectedService.id,
       project_name: projectName,
-      service_type: serviceType,
+      service_type: resolvedServiceType,
       service_quantity: serviceQuantity || null,
       estimated_completion_time: estimatedCompletionTime || null,
       identified_need: identifiedNeed,
@@ -488,7 +492,7 @@ export default function ActionAgreementPage() {
     setSubmitted({
       service: selectedService,
       projectName,
-      serviceType,
+      serviceType: resolvedServiceType,
       serviceQuantity,
       estimatedCompletionTime,
       identifiedNeed,
@@ -511,6 +515,7 @@ export default function ActionAgreementPage() {
     setAdvisorId("")
     setProjectName("")
     setServiceType("")
+    setServiceTypeOther("")
     setServiceQuantity("")
     setEstimatedCompletionTime("")
     setIdentifiedNeed("")
@@ -788,12 +793,30 @@ export default function ActionAgreementPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="serviceType">Tipo de servicio</Label>
-                    <Input
+                    <Select
                       id="serviceType"
                       value={serviceType}
                       onChange={(event) => setServiceType(event.target.value)}
                       required
-                    />
+                    >
+                      <option value="">Selecciona un tipo</option>
+                      {serviceOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                      <option value="Otro">Otro (especificar)</option>
+                    </Select>
+                    {serviceType === "Otro" && (
+                      <Input
+                        value={serviceTypeOther}
+                        onChange={(event) =>
+                          setServiceTypeOther(event.target.value)
+                        }
+                        placeholder="Especifica el tipo de servicio"
+                        required
+                      />
+                    )}
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="serviceQuantity">
