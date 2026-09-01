@@ -24,7 +24,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { initialsFromName } from "@/lib/format"
 
 const topNavItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/", label: "Resumen", icon: LayoutDashboard, end: true },
   { to: "/customers", label: "Clientes", icon: Users },
   { to: "/servicios", label: "Servicios", icon: Briefcase },
 ]
