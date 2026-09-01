@@ -961,13 +961,20 @@ export default function ActionAgreementPage() {
                         >
                           Responsable
                         </Label>
-                        <Input
+                        <Select
                           id={`activity-${index}-responsible`}
                           value={activity.responsible}
                           onChange={(event) =>
                             updateActivity(index, "responsible", event.target.value)
                           }
-                        />
+                        >
+                          <option value="">Selecciona un responsable</option>
+                          {coordinatorOptions.map((option) => (
+                            <option key={option.id} value={option.name}>
+                              {option.name}
+                            </option>
+                          ))}
+                        </Select>
                       </div>
                     </div>
                   ))}
