@@ -370,10 +370,10 @@ export default function CustomersPage() {
                     <Building2 className="size-4" />
                   </div>
                   <CardTitle className="mt-2 text-base">
-                    {group.client.business_name}
+                    {group.client.representative_name}
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    {group.client.representative_name}
+                    {group.client.business_name}
                   </p>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2 pb-6 text-sm">
@@ -448,11 +448,15 @@ export default function CustomersPage() {
       <Sheet
         open={selectedGroup !== null}
         onClose={closeSheet}
-        title={selectedGroup?.client.business_name}
-        description={selectedGroup?.client.representative_name}
+        title={selectedGroup?.client.representative_name}
+        description={selectedGroup?.client.business_name}
       >
         {selectedGroup && (
           <div className="flex flex-col gap-4">
+            <DetailRow
+              label="Representante"
+              value={selectedGroup.client.representative_name}
+            />
             <DetailRow
               label="Nombre del Negocio o Emprendimiento"
               value={selectedGroup.client.business_name}
@@ -477,10 +481,6 @@ export default function CustomersPage() {
                 value={selectedGroup.client.municipality}
               />
             </div>
-            <DetailRow
-              label="Representante"
-              value={selectedGroup.client.representative_name}
-            />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow
                 label="Sexo"
