@@ -552,6 +552,11 @@ create table satisfaction_surveys (
 
 alter table satisfaction_surveys enable row level security;
 
+create policy "Staff autenticado ve las encuestas de satisfacción"
+  on satisfaction_surveys for select
+  to authenticated
+  using (true);
+
 create or replace function submit_satisfaction_survey(p_survey jsonb)
 returns uuid
 language plpgsql
