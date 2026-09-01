@@ -641,34 +641,68 @@ export default function ServicesPage() {
     actionAgreementId: string | null
     completionAgreementId: string | null
   }>({ actionAgreementId: null, completionAgreementId: null })
+  const [pendingAgreements, setPendingAgreements] = useState<{
+    actionAgreementId: string | null
+    completionAgreementId: string | null
+  }>({ actionAgreementId: null, completionAgreementId: null })
+  const [actionSignLinkCopied, setActionSignLinkCopied] = useState(false)
+  const [completionSignLinkCopied, setCompletionSignLinkCopied] = useState(false)
 
   async function loadAvailableAgreements(requestId: string) {
-    // Solo cuenta como "disponible para exportar" si el cliente ya firmó
-    // — si la firma quedó pendiente por enlace, el documento todavía no
-    // está completo.
+    // El acuerdo más reciente de cada tipo puede estar firmado (se puede
+    // exportar como PDF) o con la firma del cliente pendiente por enlace
+    // (se muestra como pendiente, con opción de volver a copiar el enlace).
     const [actionResult, completionResult] = await Promise.all([
       supabase
         .from("project_action_agreements")
-        .select("id")
+        .select("id, client_signature")
         .eq("service_request_id", requestId)
-        .not("client_signature", "is", null)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
       supabase
         .from("completion_agreements")
-        .select("id")
+        .select("id, client_signature")
         .eq("service_request_id", requestId)
-        .not("client_signature", "is", null)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
     ])
 
     setAvailableAgreements({
-      actionAgreementId: actionResult.data?.id ?? null,
-      completionAgreementId: completionResult.data?.id ?? null,
+      actionAgreementId: actionResult.data?.client_signature
+        ? actionResult.data.id
+        : null,
+      completionAgreementId: completionResult.data?.client_signature
+        ? completionResult.data.id
+        : null,
     })
+    setPendingAgreements({
+      actionAgreementId:
+        actionResult.data && !actionResult.data.client_signature
+          ? actionResult.data.id
+          : null,
+      completionAgreementId:
+        completionResult.data && !completionResult.data.client_signature
+          ? completionResult.data.id
+          : null,
+    })
+  }
+
+  async function handleCopyActionAgreementSignLink() {
+    if (!pendingAgreements.actionAgreementId) return
+    const url = `${window.location.origin}/firmar-acuerdo-acciones/${pendingAgreements.actionAgreementId}`
+    await navigator.clipboard.writeText(url)
+    setActionSignLinkCopied(true)
+    setTimeout(() => setActionSignLinkCopied(false), 2000)
+  }
+
+  async function handleCopyCompletionAgreementSignLink() {
+    if (!pendingAgreements.completionAgreementId) return
+    const url = `${window.location.origin}/firmar-acuerdo-finalizacion/${pendingAgreements.completionAgreementId}`
+    await navigator.clipboard.writeText(url)
+    setCompletionSignLinkCopied(true)
+    setTimeout(() => setCompletionSignLinkCopied(false), 2000)
   }
 
   async function handleExportServicePdf() {
@@ -1767,6 +1801,63 @@ export default function ServicesPage() {
                 {serviceStatusLabel(selected.status)}
               </Badge>
             </div>
+
+            {(pendingAgreements.actionAgreementId ||
+              pendingAgreements.completionAgreementId) && (
+              <div className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 dark:border-amber-400/30 dark:bg-amber-400/10">
+                {pendingAgreements.actionAgreementId && (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-amber-700 dark:text-amber-400">
+                      Acuerdo de Acciones: esperando firma del cliente
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCopyActionAgreementSignLink}
+                    >
+                      {actionSignLinkCopied ? (
+                        <>
+                          <Check className="size-4" />
+                          Copiado
+                        </>
+                      ) : (
+                        <>
+                          <LinkIcon className="size-4" />
+                          Copiar enlace
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+                {pendingAgreements.completionAgreementId && (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-amber-700 dark:text-amber-400">
+                      Acuerdo de Finalización: esperando firma del cliente
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCopyCompletionAgreementSignLink}
+                    >
+                      {completionSignLinkCopied ? (
+                        <>
+                          <Check className="size-4" />
+                          Copiado
+                        </>
+                      ) : (
+                        <>
+                          <LinkIcon className="size-4" />
+                          Copiar enlace
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
             <DetailRow
               label="Asesor encargado"
               value={
