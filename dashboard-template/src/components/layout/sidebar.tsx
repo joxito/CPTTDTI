@@ -8,7 +8,6 @@ import {
   ClipboardList,
   ClipboardCheck,
   FileText,
-  Star,
   FileSignature,
   Briefcase,
   History,
@@ -45,11 +44,9 @@ const formNavItems = [
     label: "Acuerdo de Finalización",
     icon: FileSignature,
   },
-  {
-    to: "/encuesta-satisfaccion",
-    label: "Encuesta de Satisfacción",
-    icon: Star,
-  },
+  // Encuesta de Satisfacción no aparece aquí a propósito: solo se
+  // accede por el enlace público que genera el botón "Encuesta" en
+  // Servicios, cuando un servicio ya está "Completo" (ver services.tsx).
 ]
 
 const formPlaceholders: string[] = []
