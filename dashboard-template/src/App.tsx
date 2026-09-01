@@ -13,6 +13,8 @@ import SatisfactionSurveyPage from "@/pages/satisfaction-survey"
 import CompletionAgreementPage from "@/pages/completion-agreement"
 import ActionAgreementPage from "@/pages/action-agreement"
 import SignRequestPage from "@/pages/sign-request"
+import SignActionAgreementPage from "@/pages/sign-action-agreement"
+import SignCompletionAgreementPage from "@/pages/sign-completion-agreement"
 import LoginPage from "@/pages/login"
 
 export default function App() {
@@ -55,6 +57,14 @@ export default function App() {
         element={<SatisfactionSurveyPage standalone />}
       />
       <Route path="/firmar/:id" element={<SignRequestPage />} />
+      <Route
+        path="/firmar-acuerdo-acciones/:id"
+        element={<SignActionAgreementPage />}
+      />
+      <Route
+        path="/firmar-acuerdo-finalizacion/:id"
+        element={<SignCompletionAgreementPage />}
+      />
     </Routes>
   )
 }

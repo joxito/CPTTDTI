@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import jsPDF from "jspdf"
-import { FileDown } from "lucide-react"
+import { Check, FileDown, Link as LinkIcon } from "lucide-react"
 
 import {
   Card,
@@ -15,6 +15,7 @@ import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Combobox } from "@/components/ui/combobox"
 import { SignatureCanvas } from "@/components/ui/signature-canvas"
+import { serviceOptions } from "@/data/service-request-options"
 import { CREATOR_EMAIL, useAuth } from "@/hooks/use-auth"
 import { supabase } from "@/lib/supabase"
 
@@ -330,6 +331,7 @@ export default function ActionAgreementPage() {
   const [coordinatorId, setCoordinatorId] = useState("")
   const [projectName, setProjectName] = useState("")
   const [serviceType, setServiceType] = useState("")
+  const [serviceTypeOther, setServiceTypeOther] = useState("")
   const [serviceQuantity, setServiceQuantity] = useState("")
   const [estimatedCompletionTime, setEstimatedCompletionTime] = useState("")
   const [identifiedNeed, setIdentifiedNeed] = useState("")
@@ -342,10 +344,13 @@ export default function ActionAgreementPage() {
     { ...emptyActivity },
   ])
   const [clientSignature, setClientSignature] = useState("")
+  const [clientSignMode, setClientSignMode] = useState<"now" | "link">("now")
   const [agreementDate, setAgreementDate] = useState(todayIso())
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submitted, setSubmitted] = useState<SubmittedAgreement | null>(null)
+  const [linkAgreementId, setLinkAgreementId] = useState<string | null>(null)
+  const [signLinkCopied, setSignLinkCopied] = useState(false)
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const [pdfError, setPdfError] = useState("")
 
@@ -406,12 +411,25 @@ export default function ActionAgreementPage() {
     (option) => option.role === "administrador"
   )
   const filledActivities = activities.filter((a) => a.description.trim())
+  const resolvedServiceType =
+    serviceType === "Otro" ? serviceTypeOther.trim() : serviceType
 
   function handleSelectService(label: string) {
     const service = serviceOptionsMap.get(label)
     setSelectedServiceId(service?.id ?? "")
-    setAdvisorId(service?.assigned_advisor_id ?? "")
-    setCoordinatorId(service?.assigned_coordinator_id ?? "")
+    // Si el servicio no tiene asesor/coordinador asignado, se preseleccionan
+    // Diego y Sofía por defecto -- se pueden cambiar libremente en los
+    // desplegables.
+    const defaultAdvisor = staffOptions.find((option) =>
+      option.name.trim().startsWith("Diego")
+    )
+    const defaultCoordinator = coordinatorOptions.find((option) =>
+      option.name.trim().startsWith("Sofía")
+    )
+    setAdvisorId(service?.assigned_advisor_id ?? defaultAdvisor?.id ?? "")
+    setCoordinatorId(
+      service?.assigned_coordinator_id ?? defaultCoordinator?.id ?? ""
+    )
   }
 
   function updateActivity(
@@ -430,41 +448,55 @@ export default function ActionAgreementPage() {
     event.preventDefault()
     if (!selectedService || !advisorId || !selectedAdvisor?.signature) return
     if (!coordinatorId || !selectedCoordinator?.signature) return
-    if (!clientSignature) return
+    if (clientSignMode === "now" && !clientSignature) return
     if (filledActivities.length === 0) return
+
+    const signNow = clientSignMode === "now"
 
     setSubmitting(true)
     setSubmitError("")
 
-    const { error } = await supabase.from("project_action_agreements").insert({
-      service_request_id: selectedService.id,
-      project_name: projectName,
-      service_type: serviceType,
-      service_quantity: serviceQuantity || null,
-      estimated_completion_time: estimatedCompletionTime || null,
-      identified_need: identifiedNeed,
-      service_scope: serviceScope,
-      proposed_solution: proposedSolution,
-      agreements,
-      activities: filledActivities.map((a) => ({
-        description: a.description,
-        start_date: a.startDate,
-        end_date: a.endDate,
-        responsible: a.responsible,
-      })),
-      advisor_id: advisorId,
-      advisor_signature: selectedAdvisor.signature,
-      coordinator_name: selectedCoordinator.name,
-      coordinator_signature: selectedCoordinator.signature,
-      client_signature: clientSignature,
-      agreement_date: agreementDate,
-    })
+    const { data, error } = await supabase
+      .from("project_action_agreements")
+      .insert({
+        service_request_id: selectedService.id,
+        project_name: projectName,
+        service_type: resolvedServiceType,
+        service_quantity: serviceQuantity || null,
+        estimated_completion_time: estimatedCompletionTime || null,
+        identified_need: identifiedNeed,
+        service_scope: serviceScope,
+        proposed_solution: proposedSolution,
+        agreements,
+        activities: filledActivities.map((a) => ({
+          description: a.description,
+          start_date: a.startDate,
+          end_date: a.endDate,
+          responsible: a.responsible,
+        })),
+        advisor_id: advisorId,
+        advisor_signature: selectedAdvisor.signature,
+        coordinator_name: selectedCoordinator.name,
+        coordinator_signature: selectedCoordinator.signature,
+        client_signature: signNow ? clientSignature : null,
+        agreement_date: agreementDate,
+      })
+      .select("id")
+      .single()
 
-    if (error) {
+    if (error || !data) {
       setSubmitting(false)
       setSubmitError(
         "No pudimos guardar el acuerdo. Intenta de nuevo en unos minutos."
       )
+      return
+    }
+
+    if (!signNow) {
+      // La firma queda pendiente por enlace — el servicio no avanza de
+      // etapa hasta que el cliente firme (ver sign_action_agreement).
+      setSubmitting(false)
+      setLinkAgreementId(data.id)
       return
     }
 
@@ -488,7 +520,7 @@ export default function ActionAgreementPage() {
     setSubmitted({
       service: selectedService,
       projectName,
-      serviceType,
+      serviceType: resolvedServiceType,
       serviceQuantity,
       estimatedCompletionTime,
       identifiedNeed,
@@ -505,12 +537,21 @@ export default function ActionAgreementPage() {
     })
   }
 
+  async function handleCopySignLink() {
+    if (!linkAgreementId) return
+    const url = `${window.location.origin}/firmar-acuerdo-acciones/${linkAgreementId}`
+    await navigator.clipboard.writeText(url)
+    setSignLinkCopied(true)
+    setTimeout(() => setSignLinkCopied(false), 2000)
+  }
+
   function handleNewAgreement() {
     setSubmitted(null)
     setSelectedServiceId("")
     setAdvisorId("")
     setProjectName("")
     setServiceType("")
+    setServiceTypeOther("")
     setServiceQuantity("")
     setEstimatedCompletionTime("")
     setIdentifiedNeed("")
@@ -520,6 +561,8 @@ export default function ActionAgreementPage() {
     setActivities([{ ...emptyActivity }, { ...emptyActivity }, { ...emptyActivity }])
     setCoordinatorId("")
     setClientSignature("")
+    setClientSignMode("now")
+    setLinkAgreementId(null)
     setAgreementDate(todayIso())
   }
 
@@ -555,6 +598,49 @@ export default function ActionAgreementPage() {
     }
 
     setGeneratingPdf(false)
+  }
+
+  if (linkAgreementId) {
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-6">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Acuerdo de Acciones del Proyecto
+        </h1>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-success/10 text-success">
+              <LinkIcon className="size-5" />
+            </div>
+            <CardDescription>
+              Acuerdo guardado. Envía este enlace al cliente para que revise
+              la información y firme. El servicio pasará a "En proceso" en
+              cuanto firme.
+            </CardDescription>
+            <Button type="button" variant="outline" onClick={handleCopySignLink}>
+              {signLinkCopied ? (
+                <>
+                  <Check className="size-4" />
+                  Enlace copiado
+                </>
+              ) : (
+                <>
+                  <LinkIcon className="size-4" />
+                  Copiar enlace de firma
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleNewAgreement}
+          className="self-start"
+        >
+          Crear otro acuerdo
+        </Button>
+      </div>
+    )
   }
 
   if (submitted) {
@@ -788,12 +874,30 @@ export default function ActionAgreementPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="serviceType">Tipo de servicio</Label>
-                    <Input
+                    <Select
                       id="serviceType"
                       value={serviceType}
                       onChange={(event) => setServiceType(event.target.value)}
                       required
-                    />
+                    >
+                      <option value="">Selecciona un tipo</option>
+                      {serviceOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                      <option value="Otro">Otro (especificar)</option>
+                    </Select>
+                    {serviceType === "Otro" && (
+                      <Input
+                        value={serviceTypeOther}
+                        onChange={(event) =>
+                          setServiceTypeOther(event.target.value)
+                        }
+                        placeholder="Especifica el tipo de servicio"
+                        required
+                      />
+                    )}
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="serviceQuantity">
@@ -938,13 +1042,20 @@ export default function ActionAgreementPage() {
                         >
                           Responsable
                         </Label>
-                        <Input
+                        <Select
                           id={`activity-${index}-responsible`}
                           value={activity.responsible}
                           onChange={(event) =>
                             updateActivity(index, "responsible", event.target.value)
                           }
-                        />
+                        >
+                          <option value="">Selecciona un responsable</option>
+                          {coordinatorOptions.map((option) => (
+                            <option key={option.id} value={option.name}>
+                              {option.name}
+                            </option>
+                          ))}
+                        </Select>
                       </div>
                     </div>
                   ))}
@@ -1023,10 +1134,42 @@ export default function ActionAgreementPage() {
 
                 <div className="flex flex-col gap-1.5">
                   <Label>Firma Cliente</Label>
-                  <SignatureCanvas
-                    value={clientSignature}
-                    onChange={setClientSignature}
-                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setClientSignMode("now")}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                        clientSignMode === "now"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/70"
+                      }`}
+                    >
+                      Firmar ahora
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClientSignMode("link")}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                        clientSignMode === "link"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/70"
+                      }`}
+                    >
+                      Enviar enlace
+                    </button>
+                  </div>
+                  {clientSignMode === "now" ? (
+                    <SignatureCanvas
+                      value={clientSignature}
+                      onChange={setClientSignature}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Al guardar, se genera un enlace para que el cliente
+                      revise el acuerdo y firme después. El servicio no pasa
+                      a "En proceso" hasta que firme.
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -1058,7 +1201,7 @@ export default function ActionAgreementPage() {
             !selectedAdvisor?.signature ||
             !coordinatorId ||
             !selectedCoordinator?.signature ||
-            !clientSignature ||
+            (clientSignMode === "now" && !clientSignature) ||
             filledActivities.length === 0
           }
           className="self-end"

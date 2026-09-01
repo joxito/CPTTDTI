@@ -89,6 +89,19 @@ export default function ServiceRequestPage({
     const dataTransfer = new DataTransfer()
     idPhotos.forEach((file) => dataTransfer.items.add(file))
     input.files = dataTransfer.files
+
+    // Se exigen ambas caras de la cédula, salvo que se suba un solo PDF
+    // (se asume que trae las dos páginas). El input file nativo solo sabe
+    // validar "vacío o no", así que la regla de cantidad se aplica con
+    // setCustomValidity.
+    const isSinglePdf =
+      idPhotos.length === 1 && idPhotos[0].type === "application/pdf"
+    const isValid = idPhotos.length >= 2 || isSinglePdf
+    input.setCustomValidity(
+      isValid
+        ? ""
+        : "Sube el frente y el dorso de la cédula, o un PDF con ambas caras."
+    )
   }, [idPhotos])
 
   useEffect(() => {
@@ -572,6 +585,10 @@ export default function ServiceRequestPage({
               <Label htmlFor="idPhotos">
                 11. Fotografías de ambos lados de la Cédula <RequiredMark />
               </Label>
+              <p className="text-xs text-muted-foreground">
+                Se necesitan el frente y el dorso (dos fotos), o un solo PDF
+                con ambas caras.
+              </p>
 
               <div className="flex flex-wrap gap-2">
                 <label
@@ -581,7 +598,7 @@ export default function ServiceRequestPage({
                   <Upload className="size-4" />
                   Subir documento
                 </label>
-                {hasCamera && (
+                {hasCamera && idPhotos.length < 2 && (
                   <Button
                     type="button"
                     variant="outline"
@@ -596,7 +613,7 @@ export default function ServiceRequestPage({
               <input
                 id="idPhotosUpload"
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf"
                 multiple
                 className="sr-only"
                 onChange={(event) => {
@@ -608,9 +625,15 @@ export default function ServiceRequestPage({
               <CameraCapture
                 open={cameraOpen}
                 onClose={() => setCameraOpen(false)}
+                title={
+                  idPhotos.length === 0
+                    ? "Foto de la cédula — parte frontal"
+                    : "Foto de la cédula — parte trasera"
+                }
                 onCapture={(file) => {
+                  const willReachTwo = idPhotos.length + 1 >= 2
                   addIdPhotos([file])
-                  setCameraOpen(false)
+                  if (willReachTwo) setCameraOpen(false)
                 }}
               />
               {/* Control real (oculto) que participa de la validación del formulario. */}

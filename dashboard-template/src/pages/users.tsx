@@ -108,12 +108,11 @@ export default function UsersPage() {
   }, [isCreator])
 
   function openAddSheet() {
-    const password = generatePassword()
     setNewEmail("")
     setNewName("")
     setNewRole("editor")
-    setNewPassword(password)
-    setConfirmPassword(password)
+    setNewPassword("")
+    setConfirmPassword("")
     setCreateError("")
     setShowNewPassword(false)
     setAddOpen(true)
@@ -167,7 +166,7 @@ export default function UsersPage() {
     setEditPhoto(row.photo)
     setEditError("")
     setEditMessage("")
-    setResetPassword(generatePassword())
+    setResetPassword("")
     setResetConfirmPassword("")
     setResetError("")
     setResetMessage("")

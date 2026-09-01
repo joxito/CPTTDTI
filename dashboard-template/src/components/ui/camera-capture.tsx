@@ -7,9 +7,15 @@ type CameraCaptureProps = {
   open: boolean
   onClose: () => void
   onCapture: (file: File) => void
+  title?: string
 }
 
-export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) {
+export function CameraCapture({
+  open,
+  onClose,
+  onCapture,
+  title = "Tomar foto",
+}: CameraCaptureProps) {
   const videoRef = React.useRef<HTMLVideoElement>(null)
   const streamRef = React.useRef<MediaStream | null>(null)
   const [error, setError] = React.useState("")
@@ -72,7 +78,7 @@ export function CameraCapture({ open, onClose, onCapture }: CameraCaptureProps) 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="flex w-full max-w-md flex-col gap-3 rounded-xl bg-background p-4 shadow-lg">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Tomar foto</h2>
+          <h2 className="text-sm font-semibold">{title}</h2>
           <button
             type="button"
             onClick={onClose}

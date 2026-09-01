@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import jsPDF from "jspdf"
-import { FileDown } from "lucide-react"
+import { Check, FileDown, Link as LinkIcon } from "lucide-react"
 
 import {
   Card,
@@ -55,6 +55,7 @@ type SubmittedAgreement = {
 
 export type CompletionAgreementPdfData = {
   businessName: string
+  representativeName: string
   advisorName: string
   advisorSignature: string
   clientSignature: string
@@ -110,6 +111,10 @@ export async function buildAgreementPdf(agreement: CompletionAgreementPdfData) {
   doc.text("Cliente", margin, y)
   doc.setFont("helvetica", "normal")
   doc.text(agreement.businessName, margin + 25, y)
+  doc.setFont("helvetica", "bold")
+  doc.text("Representante", margin + 95, y)
+  doc.setFont("helvetica", "normal")
+  doc.text(agreement.representativeName, margin + 128, y)
   y += 4
   doc.line(margin, y, margin + contentWidth, y)
   y += 6
@@ -203,9 +208,12 @@ export default function CompletionAgreementPage() {
   const [advisorId, setAdvisorId] = useState("")
   const [agreementDate, setAgreementDate] = useState(todayIso())
   const [clientSignature, setClientSignature] = useState("")
+  const [clientSignMode, setClientSignMode] = useState<"now" | "link">("now")
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submitted, setSubmitted] = useState<SubmittedAgreement | null>(null)
+  const [linkAgreementId, setLinkAgreementId] = useState<string | null>(null)
+  const [signLinkCopied, setSignLinkCopied] = useState(false)
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const [pdfError, setPdfError] = useState("")
 
@@ -270,24 +278,38 @@ export default function CompletionAgreementPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedService || !advisorId || !selectedAdvisor?.signature) return
-    if (!clientSignature) return
+    if (clientSignMode === "now" && !clientSignature) return
+
+    const signNow = clientSignMode === "now"
 
     setSubmitting(true)
     setSubmitError("")
 
-    const { error } = await supabase.from("completion_agreements").insert({
-      service_request_id: selectedService.id,
-      advisor_id: advisorId,
-      advisor_signature: selectedAdvisor.signature,
-      client_signature: clientSignature,
-      agreement_date: agreementDate,
-    })
+    const { data, error } = await supabase
+      .from("completion_agreements")
+      .insert({
+        service_request_id: selectedService.id,
+        advisor_id: advisorId,
+        advisor_signature: selectedAdvisor.signature,
+        client_signature: signNow ? clientSignature : null,
+        agreement_date: agreementDate,
+      })
+      .select("id")
+      .single()
 
-    if (error) {
+    if (error || !data) {
       setSubmitting(false)
       setSubmitError(
         "No pudimos guardar el acuerdo. Intenta de nuevo en unos minutos."
       )
+      return
+    }
+
+    if (!signNow) {
+      // La firma queda pendiente por enlace — el servicio no pasa a
+      // "Completo" hasta que el cliente firme (ver sign_completion_agreement).
+      setSubmitting(false)
+      setLinkAgreementId(data.id)
       return
     }
 
@@ -318,12 +340,22 @@ export default function CompletionAgreementPage() {
     })
   }
 
+  async function handleCopySignLink() {
+    if (!linkAgreementId) return
+    const url = `${window.location.origin}/firmar-acuerdo-finalizacion/${linkAgreementId}`
+    await navigator.clipboard.writeText(url)
+    setSignLinkCopied(true)
+    setTimeout(() => setSignLinkCopied(false), 2000)
+  }
+
   function handleNewAgreement() {
     setSubmitted(null)
     setSelectedServiceId("")
     setAdvisorId("")
     setAgreementDate(todayIso())
     setClientSignature("")
+    setClientSignMode("now")
+    setLinkAgreementId(null)
   }
 
   async function handleExportPdf() {
@@ -335,6 +367,7 @@ export default function CompletionAgreementPage() {
     try {
       const doc = await buildAgreementPdf({
         businessName: submitted.service.business_name,
+        representativeName: submitted.service.representative_name,
         advisorName: submitted.advisorName,
         advisorSignature: submitted.advisorSignature,
         clientSignature: submitted.clientSignature,
@@ -346,6 +379,49 @@ export default function CompletionAgreementPage() {
     }
 
     setGeneratingPdf(false)
+  }
+
+  if (linkAgreementId) {
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-6">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Acuerdo de Finalización de Proyecto
+        </h1>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-success/10 text-success">
+              <LinkIcon className="size-5" />
+            </div>
+            <CardDescription>
+              Acuerdo guardado. Envía este enlace al cliente para que revise
+              la información y firme. El servicio pasará a "Completo" en
+              cuanto firme.
+            </CardDescription>
+            <Button type="button" variant="outline" onClick={handleCopySignLink}>
+              {signLinkCopied ? (
+                <>
+                  <Check className="size-4" />
+                  Enlace copiado
+                </>
+              ) : (
+                <>
+                  <LinkIcon className="size-4" />
+                  Copiar enlace de firma
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleNewAgreement}
+          className="self-start"
+        >
+          Crear otro acuerdo
+        </Button>
+      </div>
+    )
   }
 
   if (submitted) {
@@ -375,6 +451,10 @@ export default function CompletionAgreementPage() {
                 <tr className="border-b">
                   <td className="w-28 py-2 pr-4 font-medium">Cliente</td>
                   <td className="py-2">{submitted.service.business_name}</td>
+                  <td className="py-2 pr-4 pl-6 font-medium">Representante</td>
+                  <td className="py-2">
+                    {submitted.service.representative_name}
+                  </td>
                 </tr>
                 <tr className="border-b">
                   <td className="py-2 pr-4 font-medium">Asesor</td>
@@ -534,12 +614,65 @@ export default function CompletionAgreementPage() {
                   />
                 </div>
 
+                <div className="flex flex-col gap-2 border-t pt-4">
+                  <p className="font-medium">El asesor:</p>
+                  <p className="text-sm text-muted-foreground">
+                    Indica que ha completado las actividades acordadas en el
+                    documento Acuerdo de Acciones de su proyecto, en el
+                    tiempo y alcance esperado.
+                  </p>
+                  <p className="font-medium">El cliente:</p>
+                  {CLIENT_STATEMENTS.map((statement) => (
+                    <p
+                      key={statement}
+                      className="text-sm text-muted-foreground"
+                    >
+                      {statement}
+                    </p>
+                  ))}
+                  <p className="text-xs text-muted-foreground">
+                    El cliente debe leer lo anterior antes de firmar.
+                  </p>
+                </div>
+
                 <div className="flex flex-col gap-1.5">
                   <Label>Firma Cliente</Label>
-                  <SignatureCanvas
-                    value={clientSignature}
-                    onChange={setClientSignature}
-                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setClientSignMode("now")}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                        clientSignMode === "now"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/70"
+                      }`}
+                    >
+                      Firmar ahora
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClientSignMode("link")}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                        clientSignMode === "link"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/70"
+                      }`}
+                    >
+                      Enviar enlace
+                    </button>
+                  </div>
+                  {clientSignMode === "now" ? (
+                    <SignatureCanvas
+                      value={clientSignature}
+                      onChange={setClientSignature}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Al guardar, se genera un enlace para que el cliente lea
+                      lo anterior y firme después. El servicio no pasa a
+                      "Completo" hasta que firme.
+                    </p>
+                  )}
                 </div>
               </>
             )}
@@ -557,7 +690,7 @@ export default function CompletionAgreementPage() {
             !selectedService ||
             !advisorId ||
             !selectedAdvisor?.signature ||
-            !clientSignature
+            (clientSignMode === "now" && !clientSignature)
           }
           className="self-end"
         >
