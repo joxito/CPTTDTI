@@ -467,7 +467,7 @@ export default function CustomersPage() {
                 value={selectedGroup.client.rnc_number}
               />
             )}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow
                 label="Provincia"
                 value={selectedGroup.client.province}
@@ -481,7 +481,7 @@ export default function CustomersPage() {
               label="Representante"
               value={selectedGroup.client.representative_name}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow
                 label="Sexo"
                 value={
@@ -492,7 +492,7 @@ export default function CustomersPage() {
               />
               <DetailRow label="Edad" value={selectedGroup.client.age} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow label="Teléfono" value={selectedGroup.client.phone} />
               <DetailRow
                 label="¿Es dueño de la empresa?"

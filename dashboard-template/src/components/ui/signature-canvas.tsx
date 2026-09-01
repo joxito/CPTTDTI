@@ -121,7 +121,7 @@ export function SignatureCanvas({
       {!hasSignature && (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground">
           <PenTool className="size-5" />
-          <p className="text-xs">Dibujá tu firma aquí</p>
+          <p className="text-xs">Dibuja tu firma aquí</p>
         </div>
       )}
 

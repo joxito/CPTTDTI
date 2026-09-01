@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import * as XLSX from "xlsx"
+import jsPDF from "jspdf"
 import {
   Building2,
   Calendar,
   Check,
   Download,
+  FileDown,
+  ImagePlus,
   Link as LinkIcon,
   Mail,
   MapPin,
@@ -21,7 +24,7 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
@@ -40,7 +43,16 @@ import {
 import { regionByProvince, monthNameFromDate, trimesterFromDate } from "@/data/dominican-regions"
 import { CREATOR_EMAIL, useAuth } from "@/hooks/use-auth"
 import { formatCedula, formatPhoneNumber } from "@/lib/format"
+import {
+  buildAgreementPdf,
+  type CompletionAgreementPdfData,
+} from "@/pages/completion-agreement"
+import {
+  buildActionAgreementPdf,
+  type ActionAgreementPdfData,
+} from "@/pages/action-agreement"
 import { supabase } from "@/lib/supabase"
+import { cn } from "@/lib/utils"
 
 type Client = {
   id: string
@@ -72,9 +84,11 @@ type ServiceRequest = {
   services: string[]
   referral: string
   referral_other: string | null
+  confidentiality: string | null
   signature: string | null
   status: string
   assigned_advisor_id: string | null
+  assigned_coordinator_id: string | null
   clients: Client
 }
 
@@ -106,6 +120,7 @@ const SERVICE_FIELD_KEYS = [
   "signature",
   "status",
   "assigned_advisor_id",
+  "assigned_coordinator_id",
 ] as const
 
 type ClientFieldKey = (typeof CLIENT_FIELD_KEYS)[number]
@@ -148,6 +163,7 @@ function toEditableFields(request: ServiceRequest): EditableFields {
     signature: request.signature,
     status: request.status,
     assigned_advisor_id: request.assigned_advisor_id,
+    assigned_coordinator_id: request.assigned_coordinator_id,
   }
 }
 
@@ -174,6 +190,7 @@ function applyEditableFields(
     signature: fields.signature,
     status: fields.status,
     assigned_advisor_id: fields.assigned_advisor_id,
+    assigned_coordinator_id: fields.assigned_coordinator_id,
     clients: {
       ...request.clients,
       business_name: fields.business_name,
@@ -284,6 +301,274 @@ function downloadXlsx(
   XLSX.writeFile(workbook, filename)
 }
 
+function loadImageDataUrl(url: string): Promise<string> {
+  return fetch(url)
+    .then((res) => res.blob())
+    .then(
+      (blob) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = () =>
+            reject(new Error("No se pudo cargar la imagen"))
+          reader.readAsDataURL(blob)
+        })
+    )
+}
+
+function dataUrlImageFormat(dataUrl: string) {
+  const match = dataUrl.match(/^data:image\/(\w+);/)
+  return (match?.[1] ?? "jpeg").toUpperCase()
+}
+
+// Textos calcados de la Sección 2 — Acuerdo y Confidencialidad del
+// formulario de Solicitud de Servicios (service-request.tsx).
+const DECLARATION_TEXT =
+  "Yo declaro bajo juramento que la información proporcionada es verídica. Yo estoy de acuerdo en participar si soy seleccionado para contestar la encuesta de evaluación de los servicios de asesoría recibidos del Centro de Prototipado y Transferencia Tecnológica. Autorizo al MICM y al Centro de Prototipado y Transferencia Tecnológica el uso de mi nombre y domicilio para las encuestas de MICM. Yo autorizo al Centro de Prototipado y Transferencia Tecnológica para proporcionar la información relevante al asesor(a) asignado. Yo entiendo que el asesor(a) ha acordado: 1) no recomendar servicios o bienes en el cual tenga interés personal. 2) no aceptar comisiones o pagos por el asesoramiento. Yo acepto dar un aporte empresarial en aquellos servicios que me ofrezca el Centro de Prototipado y Transferencia Tecnológica y que tengan un costo para mí como empresario."
+
+const CONFIDENTIALITY_TEXT =
+  "El Centro de Prototipado y Transferencia Tecnológica mantendrá estricta confidencialidad e imparcialidad durante la ejecución de los trabajos aquí descritos, así como al término de los mismos. De la misma manera, las informaciones a las que el Centro de Prototipado y Transferencia Tecnológica tendrá acceso directa o indirectamente quedarán sujetas a esta cláusula. El Centro de Prototipado y Transferencia Tecnológica exigirá compromisos de confidencialidad e imparcialidad similares a terceros, auditores y a los que el centro tenga que involucrar para el cumplimiento de los objetivos de esta propuesta. En caso de requerimiento de tipo judicial, ordenado por un juez competente, el Centro de Prototipado y Transferencia Tecnológica quedará liberado de dicha confidencialidad y se contactará al cliente para informarle."
+
+// Genera un PDF con todos los datos del formulario de esta solicitud
+// (no solo lo que cabe en pantalla) — incluye las fotos de cédula y la
+// firma como imágenes reales, no solo enlaces. Todo en dos columnas
+// para que quepa en una sola página en el caso normal; si el contenido
+// es inusualmente largo, sigue paginando en vez de recortarlo.
+async function buildServicePdf(
+  request: ServiceRequest,
+  advisorName: string,
+  coordinatorName: string,
+  cedulaPhotoUrls: string[]
+) {
+  const doc = new jsPDF({ unit: "mm", format: "letter" })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const margin = 14
+  const contentWidth = pageWidth - margin * 2
+  const bottomLimit = pageHeight - margin
+  const colGap = 8
+  const colWidth = (contentWidth - colGap) / 2
+  const leftX = margin
+  const rightX = margin + colWidth + colGap
+
+  type Cursor = { x: number; y: number }
+
+  function ensureSpace(cursor: Cursor, height: number) {
+    if (cursor.y + height > bottomLimit) {
+      doc.addPage()
+      cursor.y = margin
+    }
+  }
+
+  function addField(
+    cursor: Cursor,
+    label: string,
+    value: string | number | null | undefined
+  ) {
+    const text =
+      value === null || value === undefined || value === ""
+        ? "—"
+        : String(value)
+    ensureSpace(cursor, 4)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(7.5)
+    doc.text(label, cursor.x, cursor.y)
+    cursor.y += 3.6
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    const lines = doc.splitTextToSize(text, colWidth)
+    ensureSpace(cursor, lines.length * 4)
+    doc.text(lines, cursor.x, cursor.y)
+    cursor.y += lines.length * 4 + 2.5
+  }
+
+  function addSectionTitle(cursor: Cursor, title: string, width = colWidth) {
+    ensureSpace(cursor, 10)
+    doc.setDrawColor(200)
+    doc.line(cursor.x, cursor.y, cursor.x + width, cursor.y)
+    cursor.y += 5
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.text(title, cursor.x, cursor.y)
+    cursor.y += 5.5
+  }
+
+  const logo = await loadImageDataUrl("/cptt-logo.png")
+  const logoWidth = 45
+  const logoHeight = logoWidth / (439 / 109)
+  doc.addImage(logo, "PNG", margin, margin, logoWidth, logoHeight)
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(13)
+  doc.text("Solicitud de Servicios", margin + logoWidth + 6, margin + 6)
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(8)
+  doc.setTextColor(120)
+  doc.text(
+    `Generado el ${new Date().toLocaleDateString("es-DO")}`,
+    margin + logoWidth + 6,
+    margin + 11
+  )
+  doc.setTextColor(0)
+
+  const startY = margin + logoHeight + 6
+  const left: Cursor = { x: leftX, y: startY }
+  const right: Cursor = { x: rightX, y: startY }
+
+  const client = request.clients
+
+  addSectionTitle(left, "Datos del Negocio y del Representante")
+  addField(left, "Asesor encargado", advisorName)
+  addField(left, "Coordinador(a) encargado", coordinatorName)
+  addField(left, "Estado del servicio", serviceStatusLabel(request.status))
+  addField(left, "Nombre del Negocio o Emprendimiento", client.business_name)
+  addField(left, "¿Posee RNC?", client.has_rnc === "si" ? "Sí" : "No")
+  if (client.has_rnc === "si")
+    addField(left, "Número de RNC", client.rnc_number)
+  addField(left, "Provincia", client.province)
+  addField(left, "Municipio", client.municipality)
+  addField(left, "Representante", client.representative_name)
+  addField(
+    left,
+    "Sexo",
+    client.sex === "femenino" ? "Femenino" : "Masculino"
+  )
+  addField(left, "Edad", client.age)
+  addField(left, "Teléfono", client.phone)
+  addField(
+    left,
+    "¿Es dueño de la empresa?",
+    client.is_owner === "si" ? "Sí" : "No"
+  )
+  addField(left, "Número de Cédula de Identidad y Electoral", client.id_number)
+  addField(left, "Correo Electrónico", client.email)
+  addField(left, "Dirección", client.address)
+
+  addSectionTitle(right, "Datos del Servicio")
+  addField(
+    right,
+    "Sector económico",
+    request.sector === "Otro" ? request.sector_other : request.sector
+  )
+  addField(right, "Descripción del Negocio", request.business_description)
+  addField(right, "Fecha de inicio de operaciones", request.start_date)
+  addField(right, "Número de empleados", request.employee_count)
+  addField(right, "Servicios solicitados", request.services.join(", "))
+  addField(
+    right,
+    "¿Cómo se enteró de los servicios?",
+    request.referral === "Otro" ? request.referral_other : request.referral
+  )
+  addField(right, "Fecha de solicitud", formatDate(request.created_at))
+  addField(
+    right,
+    "Confidencialidad",
+    request.confidentiality === "si"
+      ? "Sí"
+      : request.confidentiality === "no"
+        ? "No"
+        : null
+  )
+
+  addSectionTitle(right, "Firma")
+  if (request.signature) {
+    ensureSpace(right, 22)
+    doc.addImage(
+      request.signature,
+      dataUrlImageFormat(request.signature),
+      right.x,
+      right.y,
+      50,
+      20
+    )
+    right.y += 22
+  } else {
+    ensureSpace(right, 5)
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    doc.text("Sin firma", right.x, right.y)
+    right.y += 5
+  }
+
+  if (cedulaPhotoUrls.length > 0) {
+    addSectionTitle(right, "Fotografías de la cédula")
+    const photoWidth = (colWidth - 4) / 2
+    const photoHeight = photoWidth * 0.65
+    let x = right.x
+
+    for (const url of cedulaPhotoUrls) {
+      try {
+        const dataUrl = await loadImageDataUrl(url)
+        ensureSpace(right, photoHeight + 3)
+        doc.addImage(
+          dataUrl,
+          dataUrlImageFormat(dataUrl),
+          x,
+          right.y,
+          photoWidth,
+          photoHeight
+        )
+        x += photoWidth + 4
+        if (x + photoWidth > right.x + colWidth) {
+          x = right.x
+          right.y += photoHeight + 3
+        }
+      } catch {
+        // Si una foto no carga, seguimos con las demás.
+      }
+    }
+    right.y += photoHeight + 4
+  }
+
+  const fullWidthCursor: Cursor = { x: margin, y: Math.max(left.y, right.y) }
+
+  function addFullWidthField(cursor: Cursor, label: string, text: string) {
+    ensureSpace(cursor, 4)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(7.5)
+    doc.text(label, cursor.x, cursor.y)
+    cursor.y += 3.4
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(7)
+    const lines = doc.splitTextToSize(text, contentWidth)
+    ensureSpace(cursor, lines.length * 3.2)
+    doc.text(lines, cursor.x, cursor.y)
+    cursor.y += lines.length * 3.2 + 3
+  }
+
+  addSectionTitle(
+    fullWidthCursor,
+    "Acuerdo y Confidencialidad",
+    contentWidth
+  )
+  addFullWidthField(fullWidthCursor, "Declaración", DECLARATION_TEXT)
+  addFullWidthField(
+    fullWidthCursor,
+    "Cláusula de confidencialidad",
+    CONFIDENTIALITY_TEXT
+  )
+
+  const footerLogos = await loadImageDataUrl("/logos-institucionales.png")
+  const footerWidthFit = Math.min(55, contentWidth)
+  const footerHeightFit = footerWidthFit / (957 / 281)
+  const spaceLeft = bottomLimit - fullWidthCursor.y
+  const footerWidth =
+    spaceLeft >= footerHeightFit + 2
+      ? footerWidthFit
+      : Math.max(30, spaceLeft * (957 / 281))
+  const footerHeight = footerWidth / (957 / 281)
+  doc.addImage(
+    footerLogos,
+    "PNG",
+    margin + (contentWidth - footerWidth) / 2,
+    fullWidthCursor.y + 2,
+    footerWidth,
+    footerHeight
+  )
+
+  return doc
+}
+
 function DetailRow({
   label,
   value,
@@ -307,7 +592,7 @@ export default function ServicesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [requests, setRequests] = useState<ServiceRequest[] | null>(null)
   const [staffOptions, setStaffOptions] = useState<
-    { id: string; name: string; email: string }[]
+    { id: string; name: string; email: string; role: string }[]
   >([])
   const [exportChoiceOpen, setExportChoiceOpen] = useState(false)
   const [error, setError] = useState("")
@@ -331,6 +616,7 @@ export default function ServicesPage() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState("")
   const [signLinkCopied, setSignLinkCopied] = useState(false)
+  const [surveyLinkCopied, setSurveyLinkCopied] = useState(false)
   const [idPhotoUrls, setIdPhotoUrls] = useState<string[] | null>(null)
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [notesError, setNotesError] = useState("")
@@ -339,6 +625,271 @@ export default function ServicesPage() {
     "client"
   )
   const [addingNote, setAddingNote] = useState(false)
+  const [evidenceCounts, setEvidenceCounts] = useState<Map<string, number>>(
+    new Map()
+  )
+  const [evidenceService, setEvidenceService] = useState<string | null>(null)
+  const [evidencePhotos, setEvidencePhotos] = useState<
+    { id: string; path: string; url: string }[] | null
+  >(null)
+  const [evidenceUploading, setEvidenceUploading] = useState(false)
+  const [evidenceError, setEvidenceError] = useState("")
+  const [exportingServicePdf, setExportingServicePdf] = useState(false)
+  const [exportServicePdfError, setExportServicePdfError] = useState("")
+  const [servicePdfChoiceOpen, setServicePdfChoiceOpen] = useState(false)
+  const [availableAgreements, setAvailableAgreements] = useState<{
+    actionAgreementId: string | null
+    completionAgreementId: string | null
+  }>({ actionAgreementId: null, completionAgreementId: null })
+
+  async function loadAvailableAgreements(requestId: string) {
+    const [actionResult, completionResult] = await Promise.all([
+      supabase
+        .from("project_action_agreements")
+        .select("id")
+        .eq("service_request_id", requestId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("completion_agreements")
+        .select("id")
+        .eq("service_request_id", requestId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+
+    setAvailableAgreements({
+      actionAgreementId: actionResult.data?.id ?? null,
+      completionAgreementId: completionResult.data?.id ?? null,
+    })
+  }
+
+  async function handleExportServicePdf() {
+    if (!selected) return
+
+    setServicePdfChoiceOpen(false)
+    setExportingServicePdf(true)
+    setExportServicePdfError("")
+
+    try {
+      const advisorName =
+        staffOptions.find((option) => option.id === selected.assigned_advisor_id)
+          ?.name ?? "Sin asignar"
+      const coordinatorName =
+        staffOptions.find(
+          (option) => option.id === selected.assigned_coordinator_id
+        )?.name ?? "Sin asignar"
+      const doc = await buildServicePdf(
+        selected,
+        advisorName,
+        coordinatorName,
+        idPhotoUrls ?? []
+      )
+      doc.save(`solicitud-servicio-${selected.clients.business_name}.pdf`)
+    } catch {
+      setExportServicePdfError("No pudimos generar el PDF. Intenta de nuevo.")
+    }
+
+    setExportingServicePdf(false)
+  }
+
+  async function handleExportActionAgreementPdf() {
+    if (!selected || !availableAgreements.actionAgreementId) return
+
+    setServicePdfChoiceOpen(false)
+    setExportingServicePdf(true)
+    setExportServicePdfError("")
+
+    try {
+      const { data, error } = await supabase
+        .from("project_action_agreements")
+        .select("*")
+        .eq("id", availableAgreements.actionAgreementId)
+        .single()
+
+      if (error || !data) throw error ?? new Error("No encontrado")
+
+      const advisorName =
+        staffOptions.find((option) => option.id === data.advisor_id)?.name ??
+        "Sin asignar"
+
+      const activities = (
+        data.activities as {
+          description: string
+          start_date: string
+          end_date: string
+          responsible: string
+        }[]
+      ).map((activity) => ({
+        description: activity.description,
+        startDate: activity.start_date,
+        endDate: activity.end_date,
+        responsible: activity.responsible,
+      }))
+
+      const pdfData: ActionAgreementPdfData = {
+        businessName: selected.clients.business_name,
+        representativeName: selected.clients.representative_name,
+        projectName: data.project_name,
+        serviceType: data.service_type,
+        serviceQuantity: data.service_quantity ?? "",
+        estimatedCompletionTime: data.estimated_completion_time ?? "",
+        identifiedNeed: data.identified_need,
+        serviceScope: data.service_scope,
+        proposedSolution: data.proposed_solution,
+        agreements: data.agreements,
+        activities,
+        advisorName,
+        advisorSignature: data.advisor_signature,
+        coordinatorName: data.coordinator_name,
+        coordinatorSignature: data.coordinator_signature,
+        clientSignature: data.client_signature,
+        agreementDate: data.agreement_date,
+      }
+
+      const doc = await buildActionAgreementPdf(pdfData)
+      doc.save(`acuerdo-acciones-${selected.clients.business_name}.pdf`)
+    } catch {
+      setExportServicePdfError("No pudimos generar el PDF. Intenta de nuevo.")
+    }
+
+    setExportingServicePdf(false)
+  }
+
+  async function handleExportCompletionAgreementPdf() {
+    if (!selected || !availableAgreements.completionAgreementId) return
+
+    setServicePdfChoiceOpen(false)
+    setExportingServicePdf(true)
+    setExportServicePdfError("")
+
+    try {
+      const { data, error } = await supabase
+        .from("completion_agreements")
+        .select("*")
+        .eq("id", availableAgreements.completionAgreementId)
+        .single()
+
+      if (error || !data) throw error ?? new Error("No encontrado")
+
+      const advisorName =
+        staffOptions.find((option) => option.id === data.advisor_id)?.name ??
+        "Sin asignar"
+
+      const pdfData: CompletionAgreementPdfData = {
+        businessName: selected.clients.business_name,
+        advisorName,
+        advisorSignature: data.advisor_signature,
+        clientSignature: data.client_signature,
+        agreementDate: data.agreement_date,
+      }
+
+      const doc = await buildAgreementPdf(pdfData)
+      doc.save(`acuerdo-finalizacion-${selected.clients.business_name}.pdf`)
+    } catch {
+      setExportServicePdfError("No pudimos generar el PDF. Intenta de nuevo.")
+    }
+
+    setExportingServicePdf(false)
+  }
+
+  async function loadEvidenceCounts(requestId: string) {
+    const { data } = await supabase
+      .from("service_evidence_photos")
+      .select("service_label")
+      .eq("service_request_id", requestId)
+
+    const counts = new Map<string, number>()
+    for (const row of data ?? []) {
+      counts.set(row.service_label, (counts.get(row.service_label) ?? 0) + 1)
+    }
+    setEvidenceCounts(counts)
+  }
+
+  async function openEvidenceModal(serviceLabel: string) {
+    if (!selected) return
+
+    setEvidenceService(serviceLabel)
+    setEvidencePhotos(null)
+    setEvidenceError("")
+
+    const { data, error } = await supabase
+      .from("service_evidence_photos")
+      .select("id, photo_path")
+      .eq("service_request_id", selected.id)
+      .eq("service_label", serviceLabel)
+      .order("created_at", { ascending: false })
+
+    if (error || !data || data.length === 0) {
+      setEvidencePhotos([])
+      return
+    }
+
+    const { data: signedUrls } = await supabase.storage
+      .from("evidencia-servicios")
+      .createSignedUrls(
+        data.map((row) => row.photo_path),
+        300
+      )
+
+    setEvidencePhotos(
+      data.map((row, index) => ({
+        id: row.id,
+        path: row.photo_path,
+        url: signedUrls?.[index]?.signedUrl ?? "",
+      }))
+    )
+  }
+
+  function closeEvidenceModal() {
+    setEvidenceService(null)
+    setEvidencePhotos(null)
+    setEvidenceError("")
+  }
+
+  async function handleUploadEvidence(files: FileList | null) {
+    if (!files || files.length === 0 || !selected || !evidenceService) return
+
+    setEvidenceUploading(true)
+    setEvidenceError("")
+
+    for (const file of Array.from(files)) {
+      const extension = file.name.split(".").pop() || "jpg"
+      const path = `${selected.id}/${crypto.randomUUID()}.${extension}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("evidencia-servicios")
+        .upload(path, file, { contentType: file.type })
+
+      if (uploadError) {
+        setEvidenceError("No pudimos subir una de las imágenes.")
+        continue
+      }
+
+      await supabase.from("service_evidence_photos").insert({
+        service_request_id: selected.id,
+        service_label: evidenceService,
+        photo_path: path,
+        uploaded_by: staffProfile?.name ?? "Usuario",
+      })
+    }
+
+    setEvidenceUploading(false)
+    await openEvidenceModal(evidenceService)
+    await loadEvidenceCounts(selected.id)
+  }
+
+  async function handleDeleteEvidence(photoId: string, path: string) {
+    if (!selected || !evidenceService) return
+
+    await supabase.storage.from("evidencia-servicios").remove([path])
+    await supabase.from("service_evidence_photos").delete().eq("id", photoId)
+
+    await openEvidenceModal(evidenceService)
+    await loadEvidenceCounts(selected.id)
+  }
 
   async function loadNotes(request: ServiceRequest) {
     setNotes(null)
@@ -489,6 +1040,14 @@ export default function ServicesPage() {
     setTimeout(() => setSignLinkCopied(false), 2000)
   }
 
+  async function handleCopySurveyLink() {
+    if (!selected) return
+    const surveyUrl = `${window.location.origin}/encuesta-satisfaccion/publico/${selected.id}`
+    await navigator.clipboard.writeText(surveyUrl)
+    setSurveyLinkCopied(true)
+    setTimeout(() => setSurveyLinkCopied(false), 2000)
+  }
+
   useEffect(() => {
     let cancelled = false
 
@@ -496,7 +1055,7 @@ export default function ServicesPage() {
       const { data, error } = await supabase
         .from("service_requests")
         .select(
-          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, signature, status, assigned_advisor_id, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address, id_photo_paths)"
+          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, confidentiality, signature, status, assigned_advisor_id, assigned_coordinator_id, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address, id_photo_paths)"
         )
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -520,7 +1079,7 @@ export default function ServicesPage() {
   useEffect(() => {
     supabase
       .from("staff")
-      .select("id, name, email")
+      .select("id, name, email, role")
       .order("name", { ascending: true })
       .then(({ data }) =>
         setStaffOptions(
@@ -562,6 +1121,8 @@ export default function ServicesPage() {
     setNewNoteScope("client")
     loadNotes(request)
     loadIdPhotoUrls(request.clients.id_photo_paths)
+    loadEvidenceCounts(request.id)
+    loadAvailableAgreements(request.id)
   }
 
   // Deep link desde Clientes: /servicios?id=<serviceRequestId> abre ese
@@ -654,6 +1215,12 @@ export default function ServicesPage() {
     setNotesError("")
     setNewNoteBody("")
     setIdPhotoUrls(null)
+    setEvidenceCounts(new Map())
+    closeEvidenceModal()
+    setAvailableAgreements({
+      actionAgreementId: null,
+      completionAgreementId: null,
+    })
   }
 
   async function handleDelete() {
@@ -1107,38 +1674,77 @@ export default function ServicesPage() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap justify-end gap-2">
-              {selected && !selected.signature && (
+            <div className="flex flex-col items-end gap-2">
+              {exportServicePdfError && (
+                <p className="text-right text-sm text-destructive">
+                  {exportServicePdfError}
+                </p>
+              )}
+              <div className="flex flex-wrap justify-end gap-1.5 sm:flex-nowrap">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={handleCopySignLink}
+                  size="sm"
+                  onClick={() => setServicePdfChoiceOpen(true)}
+                  disabled={exportingServicePdf}
                 >
-                  {signLinkCopied ? (
-                    <>
-                      <Check className="size-4" />
-                      Enlace copiado
-                    </>
-                  ) : (
-                    <>
-                      <LinkIcon className="size-4" />
-                      Enviar a firmar
-                    </>
-                  )}
+                  <FileDown className="size-4" />
+                  {exportingServicePdf ? "Generando..." : "Exportar PDF"}
                 </Button>
-              )}
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => setConfirmingDelete(true)}
-              >
-                <Trash2 className="size-4" />
-                Eliminar
-              </Button>
-              <Button type="button" onClick={startEditing}>
-                <Pencil className="size-4" />
-                Editar
-              </Button>
+                {selected && !selected.signature && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopySignLink}
+                  >
+                    {signLinkCopied ? (
+                      <>
+                        <Check className="size-4" />
+                        Copiado
+                      </>
+                    ) : (
+                      <>
+                        <LinkIcon className="size-4" />
+                        Firmar
+                      </>
+                    )}
+                  </Button>
+                )}
+                {selected && selected.status === "completo" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopySurveyLink}
+                  >
+                    {surveyLinkCopied ? (
+                      <>
+                        <Check className="size-4" />
+                        Copiado
+                      </>
+                    ) : (
+                      <>
+                        <LinkIcon className="size-4" />
+                        Encuesta
+                      </>
+                    )}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setConfirmingDelete(true)}
+                >
+                  <Trash2 className="size-4" />
+                  Eliminar
+                </Button>
+                <Button type="button" size="sm" onClick={startEditing}>
+                  <Pencil className="size-4" />
+                  Editar
+                </Button>
+              </div>
             </div>
           )
         }
@@ -1164,6 +1770,14 @@ export default function ServicesPage() {
               }
             />
             <DetailRow
+              label="Coordinador(a) encargado"
+              value={
+                staffOptions.find(
+                  (option) => option.id === selected.assigned_coordinator_id
+                )?.name ?? "Sin asignar"
+              }
+            />
+            <DetailRow
               label="Nombre del Negocio o Emprendimiento"
               value={selected.clients.business_name}
             />
@@ -1177,7 +1791,7 @@ export default function ServicesPage() {
                 value={selected.clients.rnc_number}
               />
             )}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow label="Provincia" value={selected.clients.province} />
               <DetailRow
                 label="Municipio"
@@ -1188,7 +1802,7 @@ export default function ServicesPage() {
               label="Representante"
               value={selected.clients.representative_name}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow
                 label="Sexo"
                 value={
@@ -1197,7 +1811,7 @@ export default function ServicesPage() {
               />
               <DetailRow label="Edad" value={selected.clients.age} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow label="Teléfono" value={selected.clients.phone} />
               <DetailRow
                 label="¿Es dueño de la empresa?"
@@ -1254,7 +1868,7 @@ export default function ServicesPage() {
               label="Descripción del Negocio"
               value={selected.business_description}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow
                 label="Fecha de inicio de operaciones"
                 value={selected.start_date}
@@ -1269,11 +1883,30 @@ export default function ServicesPage() {
               label="Servicios solicitados"
               value={
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {selected.services.map((service) => (
-                    <Badge key={service} variant="outline">
-                      {service}
-                    </Badge>
-                  ))}
+                  {selected.services.map((service) => {
+                    const count = evidenceCounts.get(service) ?? 0
+                    return (
+                      <button
+                        key={service}
+                        type="button"
+                        onClick={() => openEvidenceModal(service)}
+                        className="inline-flex"
+                      >
+                        <Badge
+                          variant="outline"
+                          className="cursor-pointer gap-1 hover:bg-accent"
+                        >
+                          <ImagePlus className="size-3" />
+                          {service}
+                          {count > 0 && (
+                            <span className="text-muted-foreground">
+                              ({count})
+                            </span>
+                          )}
+                        </Badge>
+                      </button>
+                    )
+                  })}
                 </div>
               }
             />
@@ -1424,20 +2057,15 @@ export default function ServicesPage() {
             )}
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="edit-status">Estado del servicio</Label>
-              <Select
-                id="edit-status"
-                value={editValues.status}
-                onChange={(event) =>
-                  updateEditValue("status", event.target.value)
-                }
-              >
-                {serviceStatusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
+              <Label>Estado del servicio</Label>
+              <p className="text-sm">
+                {serviceStatusLabel(editValues.status)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                El estado lo establece cada formulario: "En proceso" desde
+                el Acuerdo de Acciones del Proyecto, y "Completo" desde el
+                Acuerdo de Finalización.
+              </p>
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -1458,6 +2086,29 @@ export default function ServicesPage() {
                     {option.name}
                   </option>
                 ))}
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-coordinator">Coordinador(a) encargado</Label>
+              <Select
+                id="edit-coordinator"
+                value={editValues.assigned_coordinator_id ?? ""}
+                onChange={(event) =>
+                  updateEditValue(
+                    "assigned_coordinator_id",
+                    event.target.value || null
+                  )
+                }
+              >
+                <option value="">Sin asignar</option>
+                {staffOptions
+                  .filter((option) => option.role === "administrador")
+                  .map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
               </Select>
             </div>
 
@@ -1540,7 +2191,7 @@ export default function ServicesPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="edit-sex">Sexo</Label>
                 <Select
@@ -1568,7 +2219,7 @@ export default function ServicesPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="edit-phone">Teléfono</Label>
                 <Input
@@ -1664,7 +2315,7 @@ export default function ServicesPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="edit-start-date">Fecha de inicio</Label>
                 <Input
@@ -1767,7 +2418,7 @@ export default function ServicesPage() {
       {exportChoiceOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg">
-            <h2 className="text-base font-semibold">Elegí el formato</h2>
+            <h2 className="text-base font-semibold">Elige el formato</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Respeta los filtros que están aplicados en pantalla.
             </p>
@@ -1794,6 +2445,149 @@ export default function ServicesPage() {
                 type="button"
                 variant="ghost"
                 onClick={() => setExportChoiceOpen(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {evidenceService && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="flex max-h-[85vh] w-full max-w-lg flex-col gap-4 rounded-lg border bg-background p-6 shadow-lg">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-base font-semibold">Evidencia</h2>
+                <p className="text-sm text-muted-foreground">
+                  {evidenceService}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Cerrar evidencia"
+                onClick={closeEvidenceModal}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {evidencePhotos === null && (
+                <p className="text-sm text-muted-foreground">Cargando...</p>
+              )}
+              {evidencePhotos !== null && evidencePhotos.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Todavía no hay imágenes para este servicio.
+                </p>
+              )}
+              {evidencePhotos !== null && evidencePhotos.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {evidencePhotos.map((photo) => (
+                    <div key={photo.id} className="group relative">
+                      <a href={photo.url} target="_blank" rel="noreferrer">
+                        <img
+                          src={photo.url}
+                          alt="Evidencia del servicio"
+                          className="aspect-square w-full rounded-lg border object-cover"
+                        />
+                      </a>
+                      <button
+                        type="button"
+                        aria-label="Borrar imagen"
+                        onClick={() =>
+                          handleDeleteEvidence(photo.id, photo.path)
+                        }
+                        className="absolute top-1 right-1 rounded-full bg-background/90 p-1 text-muted-foreground opacity-0 shadow-xs transition-opacity group-hover:opacity-100 hover:text-destructive"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {evidenceError && (
+              <p className="text-sm text-destructive">{evidenceError}</p>
+            )}
+
+            <label>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                disabled={evidenceUploading}
+                onChange={(event) => handleUploadEvidence(event.target.files)}
+              />
+              <span
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "w-full cursor-pointer",
+                  evidenceUploading && "pointer-events-none opacity-50"
+                )}
+              >
+                <ImagePlus className="size-4" />
+                {evidenceUploading ? "Subiendo..." : "Agregar imagen"}
+              </span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {servicePdfChoiceOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg">
+            <h2 className="text-base font-semibold">Elige qué exportar</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Cada formulario se descarga como su propio PDF.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start"
+                onClick={handleExportServicePdf}
+              >
+                Solicitud de Servicios
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start"
+                disabled={!availableAgreements.actionAgreementId}
+                onClick={handleExportActionAgreementPdf}
+              >
+                Acuerdo de Acciones del Proyecto
+                {!availableAgreements.actionAgreementId && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    No disponible
+                  </span>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start"
+                disabled={!availableAgreements.completionAgreementId}
+                onClick={handleExportCompletionAgreementPdf}
+              >
+                Acuerdo de Finalización
+                {!availableAgreements.completionAgreementId && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    No disponible
+                  </span>
+                )}
+              </Button>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setServicePdfChoiceOpen(false)}
               >
                 Cancelar
               </Button>

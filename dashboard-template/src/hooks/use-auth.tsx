@@ -13,6 +13,7 @@ export type StaffProfile = {
   name: string
   role: "administrador" | "editor"
   photo: string | null
+  signature: string | null
 }
 
 type AuthContextValue = {
@@ -39,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadStaffProfile = React.useCallback(async (userId: string) => {
     const { data } = await supabase
       .from("staff")
-      .select("id, name, role, photo")
+      .select("id, name, role, photo, signature")
       .eq("id", userId)
       .maybeSingle()
     setStaffProfile(data)

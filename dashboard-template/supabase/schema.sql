@@ -91,6 +91,9 @@ create table if not exists service_requests (
   -- agrega más abajo (esa tabla todavía no existe en este punto del
   -- archivo).
   assigned_advisor_id uuid,
+  -- "Coordinador(a) encargado": mismo patrón, permite autocompletar su
+  -- firma en el Acuerdo de Acciones del Proyecto.
+  assigned_coordinator_id uuid,
 
   -- Borrado suave, igual que clients.
   deleted_at timestamptz
@@ -190,6 +193,9 @@ create table if not exists staff (
   role text not null check (role in ('administrador', 'editor')),
   -- Foto de perfil como data URL base64, mismo patrón que la firma.
   photo text,
+  -- Firma del asesor para el Acuerdo de Finalización de Proyecto, misma
+  -- codificación que la firma del cliente (data URL base64 de un PNG).
+  signature text,
   created_at timestamptz not null default now(),
 
   constraint creator_is_admin
@@ -247,6 +253,10 @@ create trigger staff_role_guard
 alter table service_requests
   add constraint service_requests_assigned_advisor_id_fkey
   foreign key (assigned_advisor_id) references staff (id) on delete set null;
+
+alter table service_requests
+  add constraint service_requests_assigned_coordinator_id_fkey
+  foreign key (assigned_coordinator_id) references staff (id) on delete set null;
 
 -- Vista sin correo, para quien no sea la cuenta creadora.
 create or replace view staff_directory as
@@ -508,6 +518,234 @@ end;
 $$;
 
 grant execute on function restore_service_request(uuid) to authenticated;
+
+-- Encuesta de satisfacción de asistencia técnica: formulario público,
+-- sin login, calcado del formulario de Google Forms existente
+-- (CPTTAPR04). No se vincula a un cliente/servicio interno porque el
+-- formulario original tampoco lo hace — solo pide correo y nombre o
+-- empresa como texto libre. Por ahora solo se guardan las respuestas;
+-- todavía no hay pantalla para verlas, así que no se agrega política
+-- de lectura (RLS queda activo sin políticas, solo la función abajo
+-- puede insertar). service_request_id es opcional: se usa cuando el
+-- asesor envía la encuesta desde un servicio ya "Completo", generando
+-- un enlace público por servicio (mismo patrón que /firmar/:id) — la
+-- encuesta general sin vincular sigue existiendo tal cual.
+create table satisfaction_surveys (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+
+  email text not null,
+  business_name text not null,
+  service_request_id uuid references service_requests (id),
+
+  overall_rating text not null
+    check (overall_rating in ('Excelente', 'Muy bueno', 'Bueno', 'Regular', 'Deficiente')),
+  staff_knowledge_satisfaction text not null
+    check (staff_knowledge_satisfaction in ('Muy satisfecho', 'Bastante satisfecho', 'Satisfecho', 'Poco satisfecho', 'Nada satisfecho')),
+  response_time_satisfaction text not null
+    check (response_time_satisfaction in ('Muy satisfecho', 'Bastante satisfecho', 'Satisfecho', 'Poco satisfecho', 'Nada satisfecho')),
+  recommend_likelihood int not null check (recommend_likelihood between 1 and 5),
+
+  suggested_referrals text,
+  suggestion text
+);
+
+alter table satisfaction_surveys enable row level security;
+
+create policy "Staff autenticado ve las encuestas de satisfacción"
+  on satisfaction_surveys for select
+  to authenticated
+  using (true);
+
+create or replace function submit_satisfaction_survey(p_survey jsonb)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  insert into satisfaction_surveys (
+    email, business_name, overall_rating, staff_knowledge_satisfaction,
+    response_time_satisfaction, recommend_likelihood, suggested_referrals,
+    suggestion, service_request_id
+  )
+  values (
+    p_survey ->> 'email',
+    p_survey ->> 'business_name',
+    p_survey ->> 'overall_rating',
+    p_survey ->> 'staff_knowledge_satisfaction',
+    p_survey ->> 'response_time_satisfaction',
+    (p_survey ->> 'recommend_likelihood')::int,
+    p_survey ->> 'suggested_referrals',
+    p_survey ->> 'suggestion',
+    nullif(p_survey ->> 'service_request_id', '')::uuid
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+grant execute on function submit_satisfaction_survey(jsonb) to anon, authenticated;
+
+-- Lectura pública mínima para precargar el nombre del negocio cuando
+-- la encuesta se abre desde un enlace vinculado a un servicio — mismo
+-- patrón que get_signing_info.
+create or replace function get_survey_link_info(p_request_id uuid)
+returns table (
+  business_name text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select c.business_name
+  from service_requests sr
+  join clients c on c.id = sr.client_id
+  where sr.id = p_request_id and sr.deleted_at is null;
+$$;
+
+grant execute on function get_survey_link_info(uuid) to anon, authenticated;
+
+-- Acuerdo de Finalización de Proyecto (CPTTAPR03): el asesor y el
+-- cliente firman en persona cuando se cierra un servicio. La firma del
+-- asesor se guarda una vez en su perfil (staff.signature) y se copia
+-- al acuerdo en el momento de crearlo, para que el documento no cambie
+-- si el asesor actualiza su firma después. La firma del cliente se
+-- dibuja en el momento, no hay enlace público — por eso no hace falta
+-- una función RPC ni política para anon, solo las políticas normales
+-- de staff autenticado.
+create table completion_agreements (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+
+  service_request_id uuid not null references service_requests (id),
+  advisor_id uuid not null references staff (id),
+  advisor_signature text not null,
+  client_signature text not null,
+  agreement_date date not null default current_date
+);
+
+alter table completion_agreements enable row level security;
+
+create policy "Staff autenticado ve los acuerdos de finalización"
+  on completion_agreements for select
+  to authenticated
+  using (true);
+
+create policy "Staff autenticado crea acuerdos de finalización"
+  on completion_agreements for insert
+  to authenticated
+  with check (true);
+
+-- Evidencia fotográfica por servicio brindado: dentro de una solicitud
+-- de servicios, cada ítem marcado en "Servicios solicitados" puede
+-- tener sus propias fotos como prueba de que se brindó. Se guarda el
+-- texto del servicio tal cual, no un id, porque `services` en
+-- service_requests ya es un array de texto libre (mismo patrón que
+-- ahí). Solo staff logueado sube/ve/borra evidencia — no hay flujo
+-- público.
+create table service_evidence_photos (
+  id uuid primary key default gen_random_uuid(),
+  service_request_id uuid not null references service_requests (id),
+  service_label text not null,
+  -- Ruta dentro del bucket privado "evidencia-servicios". No es una URL
+  -- pública — hay que pedir una signed URL para verla.
+  photo_path text not null,
+  uploaded_by text,
+  created_at timestamptz not null default now()
+);
+
+alter table service_evidence_photos enable row level security;
+
+create policy "Staff autenticado ve la evidencia de servicios"
+  on service_evidence_photos for select
+  to authenticated
+  using (true);
+
+create policy "Staff autenticado sube evidencia de servicios"
+  on service_evidence_photos for insert
+  to authenticated
+  with check (true);
+
+create policy "Staff autenticado borra evidencia de servicios"
+  on service_evidence_photos for delete
+  to authenticated
+  using (true);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('evidencia-servicios', 'evidencia-servicios', false, 8388608, array['image/jpeg', 'image/png', 'image/webp', 'image/heic'])
+on conflict (id) do nothing;
+
+create policy "Staff autenticado sube fotos de evidencia"
+  on storage.objects for insert
+  to authenticated
+  with check (bucket_id = 'evidencia-servicios');
+
+create policy "Staff autenticado ve fotos de evidencia"
+  on storage.objects for select
+  to authenticated
+  using (bucket_id = 'evidencia-servicios');
+
+create policy "Staff autenticado borra fotos de evidencia"
+  on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'evidencia-servicios');
+
+-- Acuerdo de Acciones del Proyecto (CPTTAPR02): acta de arranque que se
+-- llena cuando un servicio "Inició" pasa a estar "En proceso" — mismo
+-- patrón que el Acuerdo de Finalización, que mueve "En proceso" a
+-- "Completo". Llenar este formulario es lo único que puede mover un
+-- servicio a "En proceso" (ver services.tsx).
+--
+-- La firma del asesor se autocompleta desde su perfil (staff.signature,
+-- igual que en completion_agreements). La firma del cliente y la del
+-- coordinador(a) se dibujan en el momento — el coordinador no está
+-- atado a una cuenta de staff en particular, así que también se guarda
+-- su nombre como texto libre. No hay enlace público.
+create table project_action_agreements (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+
+  service_request_id uuid not null references service_requests (id),
+
+  project_name text not null,
+  service_type text not null,
+  service_quantity text,
+  estimated_completion_time text,
+
+  identified_need text not null,
+  service_scope text not null,
+  proposed_solution text not null,
+  agreements text not null,
+
+  -- Hasta 3 actividades: [{ description, start_date, end_date, responsible }]
+  activities jsonb not null default '[]'::jsonb,
+
+  advisor_id uuid not null references staff (id),
+  advisor_signature text not null,
+
+  coordinator_name text not null,
+  coordinator_signature text not null,
+
+  client_signature text not null,
+
+  agreement_date date not null default current_date
+);
+
+alter table project_action_agreements enable row level security;
+
+create policy "Staff autenticado ve los acuerdos de acciones"
+  on project_action_agreements for select
+  to authenticated
+  using (true);
+
+create policy "Staff autenticado crea acuerdos de acciones"
+  on project_action_agreements for insert
+  to authenticated
+  with check (true);
 
 -- Inserta la fila de la cuenta creadora en cuanto exista en auth.users.
 -- No hace nada si ya está insertada o si todavía no se creó la cuenta.
