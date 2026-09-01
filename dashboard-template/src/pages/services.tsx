@@ -785,6 +785,7 @@ export default function ServicesPage() {
 
       const pdfData: CompletionAgreementPdfData = {
         businessName: selected.clients.business_name,
+        representativeName: selected.clients.representative_name,
         advisorName,
         advisorSignature: data.advisor_signature,
         clientSignature: data.client_signature,

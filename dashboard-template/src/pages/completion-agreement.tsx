@@ -55,6 +55,7 @@ type SubmittedAgreement = {
 
 export type CompletionAgreementPdfData = {
   businessName: string
+  representativeName: string
   advisorName: string
   advisorSignature: string
   clientSignature: string
@@ -110,6 +111,10 @@ export async function buildAgreementPdf(agreement: CompletionAgreementPdfData) {
   doc.text("Cliente", margin, y)
   doc.setFont("helvetica", "normal")
   doc.text(agreement.businessName, margin + 25, y)
+  doc.setFont("helvetica", "bold")
+  doc.text("Representante", margin + 95, y)
+  doc.setFont("helvetica", "normal")
+  doc.text(agreement.representativeName, margin + 128, y)
   y += 4
   doc.line(margin, y, margin + contentWidth, y)
   y += 6
@@ -362,6 +367,7 @@ export default function CompletionAgreementPage() {
     try {
       const doc = await buildAgreementPdf({
         businessName: submitted.service.business_name,
+        representativeName: submitted.service.representative_name,
         advisorName: submitted.advisorName,
         advisorSignature: submitted.advisorSignature,
         clientSignature: submitted.clientSignature,
@@ -445,6 +451,10 @@ export default function CompletionAgreementPage() {
                 <tr className="border-b">
                   <td className="w-28 py-2 pr-4 font-medium">Cliente</td>
                   <td className="py-2">{submitted.service.business_name}</td>
+                  <td className="py-2 pr-4 pl-6 font-medium">Representante</td>
+                  <td className="py-2">
+                    {submitted.service.representative_name}
+                  </td>
                 </tr>
                 <tr className="border-b">
                   <td className="py-2 pr-4 font-medium">Asesor</td>
