@@ -643,11 +643,15 @@ export default function ServicesPage() {
   }>({ actionAgreementId: null, completionAgreementId: null })
 
   async function loadAvailableAgreements(requestId: string) {
+    // Solo cuenta como "disponible para exportar" si el cliente ya firmó
+    // — si la firma quedó pendiente por enlace, el documento todavía no
+    // está completo.
     const [actionResult, completionResult] = await Promise.all([
       supabase
         .from("project_action_agreements")
         .select("id")
         .eq("service_request_id", requestId)
+        .not("client_signature", "is", null)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
@@ -655,6 +659,7 @@ export default function ServicesPage() {
         .from("completion_agreements")
         .select("id")
         .eq("service_request_id", requestId)
+        .not("client_signature", "is", null)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),

@@ -613,10 +613,10 @@ grant execute on function get_survey_link_info(uuid) to anon, authenticated;
 -- cliente firman en persona cuando se cierra un servicio. La firma del
 -- asesor se guarda una vez en su perfil (staff.signature) y se copia
 -- al acuerdo en el momento de crearlo, para que el documento no cambie
--- si el asesor actualiza su firma después. La firma del cliente se
--- dibuja en el momento, no hay enlace público — por eso no hace falta
--- una función RPC ni política para anon, solo las políticas normales
--- de staff autenticado.
+-- si el asesor actualiza su firma después. La firma del cliente puede
+-- dibujarse en el momento o quedar pendiente y firmarse después por
+-- enlace público (ver sign_completion_agreement más abajo) — por eso
+-- la columna es opcional.
 create table completion_agreements (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
@@ -624,7 +624,7 @@ create table completion_agreements (
   service_request_id uuid not null references service_requests (id),
   advisor_id uuid not null references staff (id),
   advisor_signature text not null,
-  client_signature text not null,
+  client_signature text,
   agreement_date date not null default current_date
 );
 
@@ -639,6 +639,85 @@ create policy "Staff autenticado crea acuerdos de finalización"
   on completion_agreements for insert
   to authenticated
   with check (true);
+
+-- Lectura pública del acuerdo completo (no solo el nombre del negocio)
+-- para el enlace de firma remota: el cliente debe poder revisar todos
+-- los campos, de solo lectura, antes de firmar.
+create or replace function get_completion_agreement_signing_info(p_agreement_id uuid)
+returns table (
+  business_name text,
+  representative_name text,
+  advisor_name text,
+  advisor_signature text,
+  agreement_date date,
+  client_signature text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    c.business_name,
+    c.representative_name,
+    s.name,
+    ca.advisor_signature,
+    ca.agreement_date,
+    ca.client_signature
+  from completion_agreements ca
+  join service_requests sr on sr.id = ca.service_request_id
+  join clients c on c.id = sr.client_id
+  join staff s on s.id = ca.advisor_id
+  where ca.id = p_agreement_id;
+$$;
+
+grant execute on function get_completion_agreement_signing_info(uuid) to anon, authenticated;
+
+-- Guarda la firma del cliente y, la primera vez que se firma, avanza
+-- el servicio a "Completo" (nunca antes de que el cliente firme).
+create or replace function sign_completion_agreement(p_agreement_id uuid, p_signature text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_service_id uuid;
+  v_business_name text;
+  v_already_signed boolean;
+begin
+  select ca.service_request_id, (ca.client_signature is not null), c.business_name
+  into v_service_id, v_already_signed, v_business_name
+  from completion_agreements ca
+  join service_requests sr on sr.id = ca.service_request_id
+  join clients c on c.id = sr.client_id
+  where ca.id = p_agreement_id;
+
+  if v_service_id is null then
+    raise exception 'Acuerdo no encontrado';
+  end if;
+
+  update completion_agreements
+  set client_signature = p_signature
+  where id = p_agreement_id;
+
+  if not v_already_signed then
+    update service_requests set status = 'completo' where id = v_service_id;
+
+    insert into service_request_changes (
+      service_request_id, business_name, action, changed_fields, actor
+    )
+    values (
+      v_service_id,
+      v_business_name,
+      'editado',
+      jsonb_build_object('status', jsonb_build_object('from', 'en_proceso', 'to', 'completo')),
+      'Cliente'
+    );
+  end if;
+end;
+$$;
+
+grant execute on function sign_completion_agreement(uuid, text) to anon, authenticated;
 
 -- Evidencia fotográfica por servicio brindado: dentro de una solicitud
 -- de servicios, cada ítem marcado en "Servicios solicitados" puede
@@ -701,10 +780,11 @@ create policy "Staff autenticado borra fotos de evidencia"
 -- servicio a "En proceso" (ver services.tsx).
 --
 -- La firma del asesor se autocompleta desde su perfil (staff.signature,
--- igual que en completion_agreements). La firma del cliente y la del
--- coordinador(a) se dibujan en el momento — el coordinador no está
--- atado a una cuenta de staff en particular, así que también se guarda
--- su nombre como texto libre. No hay enlace público.
+-- igual que en completion_agreements). El coordinador no está atado a
+-- una cuenta de staff en particular, así que también se guarda su
+-- nombre como texto libre. La firma del cliente puede dibujarse en el
+-- momento o quedar pendiente y firmarse después por enlace público
+-- (ver sign_action_agreement más abajo).
 create table project_action_agreements (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
@@ -730,7 +810,7 @@ create table project_action_agreements (
   coordinator_name text not null,
   coordinator_signature text not null,
 
-  client_signature text not null,
+  client_signature text,
 
   agreement_date date not null default current_date
 );
@@ -746,6 +826,107 @@ create policy "Staff autenticado crea acuerdos de acciones"
   on project_action_agreements for insert
   to authenticated
   with check (true);
+
+-- Lectura pública del acuerdo completo (no solo el nombre del negocio)
+-- para el enlace de firma remota: el cliente debe poder revisar todos
+-- los campos, de solo lectura, antes de firmar.
+create or replace function get_action_agreement_signing_info(p_agreement_id uuid)
+returns table (
+  business_name text,
+  representative_name text,
+  project_name text,
+  service_type text,
+  service_quantity text,
+  estimated_completion_time text,
+  identified_need text,
+  service_scope text,
+  proposed_solution text,
+  agreements text,
+  activities jsonb,
+  advisor_name text,
+  advisor_signature text,
+  coordinator_name text,
+  coordinator_signature text,
+  agreement_date date,
+  client_signature text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    c.business_name,
+    c.representative_name,
+    paa.project_name,
+    paa.service_type,
+    paa.service_quantity,
+    paa.estimated_completion_time,
+    paa.identified_need,
+    paa.service_scope,
+    paa.proposed_solution,
+    paa.agreements,
+    paa.activities,
+    s.name,
+    paa.advisor_signature,
+    paa.coordinator_name,
+    paa.coordinator_signature,
+    paa.agreement_date,
+    paa.client_signature
+  from project_action_agreements paa
+  join service_requests sr on sr.id = paa.service_request_id
+  join clients c on c.id = sr.client_id
+  join staff s on s.id = paa.advisor_id
+  where paa.id = p_agreement_id;
+$$;
+
+grant execute on function get_action_agreement_signing_info(uuid) to anon, authenticated;
+
+-- Guarda la firma del cliente y, la primera vez que se firma, avanza
+-- el servicio a "En proceso" (nunca antes de que el cliente firme).
+create or replace function sign_action_agreement(p_agreement_id uuid, p_signature text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_service_id uuid;
+  v_business_name text;
+  v_already_signed boolean;
+begin
+  select paa.service_request_id, (paa.client_signature is not null), c.business_name
+  into v_service_id, v_already_signed, v_business_name
+  from project_action_agreements paa
+  join service_requests sr on sr.id = paa.service_request_id
+  join clients c on c.id = sr.client_id
+  where paa.id = p_agreement_id;
+
+  if v_service_id is null then
+    raise exception 'Acuerdo no encontrado';
+  end if;
+
+  update project_action_agreements
+  set client_signature = p_signature
+  where id = p_agreement_id;
+
+  if not v_already_signed then
+    update service_requests set status = 'en_proceso' where id = v_service_id;
+
+    insert into service_request_changes (
+      service_request_id, business_name, action, changed_fields, actor
+    )
+    values (
+      v_service_id,
+      v_business_name,
+      'editado',
+      jsonb_build_object('status', jsonb_build_object('from', 'iniciado', 'to', 'en_proceso')),
+      'Cliente'
+    );
+  end if;
+end;
+$$;
+
+grant execute on function sign_action_agreement(uuid, text) to anon, authenticated;
 
 -- Inserta la fila de la cuenta creadora en cuanto exista en auth.users.
 -- No hace nada si ya está insertada o si todavía no se creó la cuenta.
