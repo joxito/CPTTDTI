@@ -413,7 +413,7 @@ export default function CompletionAgreementPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-6 pt-4">
+            <div className="grid grid-cols-1 gap-6 pt-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium">Firma Asesor</p>
                 <img

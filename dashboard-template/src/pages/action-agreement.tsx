@@ -762,7 +762,7 @@ export default function ActionAgreementPage() {
 
             {selectedService && (
               <>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <Label>Nombre del Cliente</Label>
                     <p className="text-sm">{selectedService.business_name}</p>
@@ -785,7 +785,7 @@ export default function ActionAgreementPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="serviceType">Tipo de servicio</Label>
                     <Input
@@ -897,7 +897,7 @@ export default function ActionAgreementPage() {
                         }
                         placeholder="Descripción de la actividad"
                       />
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <div className="flex flex-col gap-1">
                           <Label
                             htmlFor={`activity-${index}-start`}

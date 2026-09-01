@@ -1680,7 +1680,7 @@ export default function ServicesPage() {
                   {exportServicePdfError}
                 </p>
               )}
-              <div className="flex flex-nowrap justify-end gap-1.5">
+              <div className="flex flex-wrap justify-end gap-1.5">
                 <Button
                   type="button"
                   variant="outline"
@@ -1791,7 +1791,7 @@ export default function ServicesPage() {
                 value={selected.clients.rnc_number}
               />
             )}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow label="Provincia" value={selected.clients.province} />
               <DetailRow
                 label="Municipio"
@@ -1802,7 +1802,7 @@ export default function ServicesPage() {
               label="Representante"
               value={selected.clients.representative_name}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow
                 label="Sexo"
                 value={
@@ -1811,7 +1811,7 @@ export default function ServicesPage() {
               />
               <DetailRow label="Edad" value={selected.clients.age} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow label="Teléfono" value={selected.clients.phone} />
               <DetailRow
                 label="¿Es dueño de la empresa?"
@@ -1868,7 +1868,7 @@ export default function ServicesPage() {
               label="Descripción del Negocio"
               value={selected.business_description}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailRow
                 label="Fecha de inicio de operaciones"
                 value={selected.start_date}
@@ -2191,7 +2191,7 @@ export default function ServicesPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="edit-sex">Sexo</Label>
                 <Select
@@ -2219,7 +2219,7 @@ export default function ServicesPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="edit-phone">Teléfono</Label>
                 <Input
@@ -2315,7 +2315,7 @@ export default function ServicesPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="edit-start-date">Fecha de inicio</Label>
                 <Input
