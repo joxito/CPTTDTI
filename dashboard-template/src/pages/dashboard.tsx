@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ClipboardList,
+  Clock,
   FileSignature,
   Star,
 } from "lucide-react"
@@ -44,12 +45,15 @@ const statusBadge: Record<
   completo: { label: "Completo", variant: "success" },
 }
 
+const STAGNATION_THRESHOLD_DAYS = 30
+
 export default function DashboardPage() {
   const navigate = useNavigate()
   const [requests, setRequests] = useState<ServiceRow[] | null>(null)
-  const [actionServiceIds, setActionServiceIds] = useState<Set<string> | null>(
-    null
-  )
+  const [actionAgreementDates, setActionAgreementDates] = useState<Map<
+    string,
+    string
+  > | null>(null)
   const [completionServiceIds, setCompletionServiceIds] = useState<
     Set<string> | null
   >(null)
@@ -68,7 +72,9 @@ export default function DashboardPage() {
               "id, status, signature, sector, sector_other, created_at, clients(business_name)"
             )
             .is("deleted_at", null),
-          supabase.from("project_action_agreements").select("service_request_id"),
+          supabase
+            .from("project_action_agreements")
+            .select("service_request_id, created_at"),
           supabase.from("completion_agreements").select("service_request_id"),
           supabase
             .from("satisfaction_surveys")
@@ -87,8 +93,10 @@ export default function DashboardPage() {
       }
 
       setRequests(requestsRes.data as unknown as ServiceRow[])
-      setActionServiceIds(
-        new Set(actionRes.data?.map((row) => row.service_request_id))
+      setActionAgreementDates(
+        new Map(
+          actionRes.data?.map((row) => [row.service_request_id, row.created_at])
+        )
       )
       setCompletionServiceIds(
         new Set(completionRes.data?.map((row) => row.service_request_id))
@@ -103,7 +111,7 @@ export default function DashboardPage() {
 
   const loaded =
     requests !== null &&
-    actionServiceIds !== null &&
+    actionAgreementDates !== null &&
     completionServiceIds !== null &&
     surveyServiceIds !== null
 
@@ -132,13 +140,13 @@ export default function DashboardPage() {
   }, [requests, surveyServiceIds])
 
   const missingActionAgreement = useMemo(() => {
-    if (!requests || !actionServiceIds) return []
+    if (!requests || !actionAgreementDates) return []
     return requests.filter(
       (r) =>
         (r.status === "en_proceso" || r.status === "completo") &&
-        !actionServiceIds.has(r.id)
+        !actionAgreementDates.has(r.id)
     )
-  }, [requests, actionServiceIds])
+  }, [requests, actionAgreementDates])
 
   const missingCompletionAgreement = useMemo(() => {
     if (!requests || !completionServiceIds) return []
@@ -146,6 +154,26 @@ export default function DashboardPage() {
       (r) => r.status === "completo" && !completionServiceIds.has(r.id)
     )
   }, [requests, completionServiceIds])
+
+  const stagnant = useMemo(() => {
+    if (!requests || !actionAgreementDates) return []
+    const now = Date.now()
+
+    return requests
+      .filter((r) => r.status === "iniciado" || r.status === "en_proceso")
+      .map((r) => {
+        const since =
+          r.status === "en_proceso"
+            ? actionAgreementDates.get(r.id) ?? r.created_at
+            : r.created_at
+        const days = Math.floor(
+          (now - new Date(since).getTime()) / (1000 * 60 * 60 * 24)
+        )
+        return { request: r, days }
+      })
+      .filter((item) => item.days >= STAGNATION_THRESHOLD_DAYS)
+      .sort((a, b) => b.days - a.days)
+  }, [requests, actionAgreementDates])
 
   function openService(id: string) {
     navigate(`/servicios?id=${id}`)
@@ -228,6 +256,28 @@ export default function DashboardPage() {
                   >
                     {r.clients?.business_name} — "Completo" sin Acuerdo de
                     Finalización
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {stagnant.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 dark:border-amber-400/30 dark:bg-amber-400/10">
+              <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-400">
+                <Clock className="size-4" />
+                Servicios estancados (sin avanzar hace {STAGNATION_THRESHOLD_DAYS}+ días)
+              </div>
+              <div className="flex flex-col gap-1">
+                {stagnant.map(({ request, days }) => (
+                  <button
+                    key={request.id}
+                    type="button"
+                    onClick={() => openService(request.id)}
+                    className="text-left text-sm text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    {request.clients?.business_name} — "
+                    {statusBadge[request.status].label}" hace {days} días
                   </button>
                 ))}
               </div>
