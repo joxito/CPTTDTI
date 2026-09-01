@@ -417,8 +417,19 @@ export default function ActionAgreementPage() {
   function handleSelectService(label: string) {
     const service = serviceOptionsMap.get(label)
     setSelectedServiceId(service?.id ?? "")
-    setAdvisorId(service?.assigned_advisor_id ?? "")
-    setCoordinatorId(service?.assigned_coordinator_id ?? "")
+    // Si el servicio no tiene asesor/coordinador asignado, se preseleccionan
+    // Diego y Sofía por defecto -- se pueden cambiar libremente en los
+    // desplegables.
+    const defaultAdvisor = staffOptions.find((option) =>
+      option.name.trim().startsWith("Diego")
+    )
+    const defaultCoordinator = coordinatorOptions.find((option) =>
+      option.name.trim().startsWith("Sofía")
+    )
+    setAdvisorId(service?.assigned_advisor_id ?? defaultAdvisor?.id ?? "")
+    setCoordinatorId(
+      service?.assigned_coordinator_id ?? defaultCoordinator?.id ?? ""
+    )
   }
 
   function updateActivity(
