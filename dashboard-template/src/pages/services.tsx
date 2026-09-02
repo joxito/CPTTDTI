@@ -1418,15 +1418,44 @@ export default function ServicesPage() {
 
       {requests !== null && requests.length > 0 && (
         <div className="flex flex-col gap-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por negocio, representante, correo..."
-              className="pl-8"
-            />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative w-full max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar por negocio, representante, correo..."
+                className="pl-8"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
+                <RefreshCw
+                  className={`size-4 ${refreshing ? "animate-spin" : ""}`}
+                />
+                Actualizar
+              </Button>
+              {isAdmin && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={!filteredRequests || filteredRequests.length === 0}
+                  onClick={() => setExportChoiceOpen(true)}
+                >
+                  <Download className="size-4" />
+                  Exportar ({filteredRequests?.length ?? 0})
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1561,33 +1590,6 @@ export default function ServicesPage() {
                   </option>
                 ))}
               </Select>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={refreshing}
-              >
-                <RefreshCw
-                  className={`size-4 ${refreshing ? "animate-spin" : ""}`}
-                />
-                Actualizar
-              </Button>
-              {isAdmin && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  disabled={!filteredRequests || filteredRequests.length === 0}
-                  onClick={() => setExportChoiceOpen(true)}
-                >
-                  <Download className="size-4" />
-                  Exportar ({filteredRequests?.length ?? 0})
-                </Button>
-              )}
             </div>
           </div>
         </div>
