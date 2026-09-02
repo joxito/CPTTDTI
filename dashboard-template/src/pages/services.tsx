@@ -1414,19 +1414,7 @@ export default function ServicesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Servicios</h1>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={refreshing}
-        >
-          <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
-          Actualizar
-        </Button>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">Servicios</h1>
 
       {requests !== null && requests.length > 0 && (
         <div className="flex flex-col gap-3">
@@ -1574,19 +1562,33 @@ export default function ServicesPage() {
                 ))}
               </Select>
             </div>
-            {isAdmin && (
+            <div className="ml-auto flex items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="ml-auto gap-1.5"
-                disabled={!filteredRequests || filteredRequests.length === 0}
-                onClick={() => setExportChoiceOpen(true)}
+                onClick={handleRefresh}
+                disabled={refreshing}
               >
-                <Download className="size-4" />
-                Exportar ({filteredRequests?.length ?? 0})
+                <RefreshCw
+                  className={`size-4 ${refreshing ? "animate-spin" : ""}`}
+                />
+                Actualizar
               </Button>
-            )}
+              {isAdmin && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={!filteredRequests || filteredRequests.length === 0}
+                  onClick={() => setExportChoiceOpen(true)}
+                >
+                  <Download className="size-4" />
+                  Exportar ({filteredRequests?.length ?? 0})
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
