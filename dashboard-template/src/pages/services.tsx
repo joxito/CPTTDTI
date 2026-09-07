@@ -12,9 +12,11 @@ import {
   Link as LinkIcon,
   Mail,
   MapPin,
+  Clock,
   Pencil,
   PenOff,
   Phone,
+  RefreshCw,
   Search,
   StickyNote,
   Trash2,
@@ -591,6 +593,10 @@ export default function ServicesPage() {
   const isAdmin = staffProfile?.role === "administrador"
   const [searchParams, setSearchParams] = useSearchParams()
   const [requests, setRequests] = useState<ServiceRequest[] | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [pendingAgreementIds, setPendingAgreementIds] = useState<Set<string>>(
+    new Set()
+  )
   const [staffOptions, setStaffOptions] = useState<
     { id: string; name: string; email: string; role: string }[]
   >([])
@@ -1088,32 +1094,53 @@ export default function ServicesPage() {
     setTimeout(() => setSurveyLinkCopied(false), 2000)
   }
 
+  async function loadRequests() {
+    const { data, error } = await supabase
+      .from("service_requests")
+      .select(
+        "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, confidentiality, signature, status, assigned_advisor_id, assigned_coordinator_id, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address, id_photo_paths)"
+      )
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      setError("No pudimos cargar los servicios. Intenta de nuevo más tarde.")
+      return
+    }
+
+    setRequests(data as unknown as ServiceRequest[])
+  }
+
+  // Servicios con un Acuerdo de Acciones o de Finalización cuya firma del
+  // cliente sigue pendiente -- se marca en la tarjeta para no tener que
+  // abrir cada servicio para saberlo (ver el aviso ámbar en el detalle).
+  async function loadPendingAgreementIds() {
+    const [actionResult, completionResult] = await Promise.all([
+      supabase
+        .from("project_action_agreements")
+        .select("service_request_id")
+        .is("client_signature", null),
+      supabase
+        .from("completion_agreements")
+        .select("service_request_id")
+        .is("client_signature", null),
+    ])
+
+    const ids = new Set<string>()
+    for (const row of actionResult.data ?? []) ids.add(row.service_request_id)
+    for (const row of completionResult.data ?? []) ids.add(row.service_request_id)
+    setPendingAgreementIds(ids)
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    await Promise.all([loadRequests(), loadPendingAgreementIds()])
+    setRefreshing(false)
+  }
+
   useEffect(() => {
-    let cancelled = false
-
-    async function loadRequests() {
-      const { data, error } = await supabase
-        .from("service_requests")
-        .select(
-          "id, created_at, client_id, sector, sector_other, business_description, start_date, employee_count, services, referral, referral_other, confidentiality, signature, status, assigned_advisor_id, assigned_coordinator_id, clients(id, business_name, has_rnc, rnc_number, province, municipality, representative_name, sex, age, phone, is_owner, id_number, email, address, id_photo_paths)"
-        )
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-
-      if (cancelled) return
-
-      if (error) {
-        setError("No pudimos cargar los servicios. Intenta de nuevo más tarde.")
-        return
-      }
-
-      setRequests(data as unknown as ServiceRequest[])
-    }
-
     loadRequests()
-    return () => {
-      cancelled = true
-    }
+    loadPendingAgreementIds()
   }, [])
 
   useEffect(() => {
@@ -1387,21 +1414,48 @@ export default function ServicesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Servicios</h1>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">Servicios</h1>
 
       {requests !== null && requests.length > 0 && (
         <div className="flex flex-col gap-3">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por negocio, representante, correo..."
-              className="pl-8"
-            />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative w-full max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar por negocio, representante, correo..."
+                className="pl-8"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
+                <RefreshCw
+                  className={`size-4 ${refreshing ? "animate-spin" : ""}`}
+                />
+                Actualizar
+              </Button>
+              {isAdmin && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={!filteredRequests || filteredRequests.length === 0}
+                  onClick={() => setExportChoiceOpen(true)}
+                >
+                  <Download className="size-4" />
+                  Exportar ({filteredRequests?.length ?? 0})
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1537,19 +1591,6 @@ export default function ServicesPage() {
                 ))}
               </Select>
             </div>
-            {isAdmin && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="ml-auto gap-1.5"
-                disabled={!filteredRequests || filteredRequests.length === 0}
-                onClick={() => setExportChoiceOpen(true)}
-              >
-                <Download className="size-4" />
-                Exportar ({filteredRequests?.length ?? 0})
-              </Button>
-            )}
           </div>
         </div>
       )}
@@ -1632,6 +1673,15 @@ export default function ServicesPage() {
                     <Badge variant="destructive">
                       <PenOff className="size-3" />
                       Sin firmar
+                    </Badge>
+                  )}
+                  {pendingAgreementIds.has(request.id) && (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-400"
+                    >
+                      <Clock className="size-3" />
+                      Firma de acuerdo pendiente
                     </Badge>
                   )}
                   <Badge variant="outline">
