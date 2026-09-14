@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Combobox } from "@/components/ui/combobox"
+import { MultiCombobox } from "@/components/ui/multi-combobox"
 import { SignatureCanvas } from "@/components/ui/signature-canvas"
 import { serviceOptions } from "@/data/service-request-options"
 import { CREATOR_EMAIL, useAuth } from "@/hooks/use-auth"
@@ -330,9 +331,8 @@ export default function ActionAgreementPage() {
   const [advisorId, setAdvisorId] = useState("")
   const [coordinatorId, setCoordinatorId] = useState("")
   const [projectName, setProjectName] = useState("")
-  const [serviceType, setServiceType] = useState("")
+  const [serviceTypes, setServiceTypes] = useState<string[]>([])
   const [serviceTypeOther, setServiceTypeOther] = useState("")
-  const [serviceQuantity, setServiceQuantity] = useState("")
   const [estimatedCompletionTime, setEstimatedCompletionTime] = useState("")
   const [identifiedNeed, setIdentifiedNeed] = useState("")
   const [serviceScope, setServiceScope] = useState("")
@@ -411,8 +411,11 @@ export default function ActionAgreementPage() {
     (option) => option.role === "administrador"
   )
   const filledActivities = activities.filter((a) => a.description.trim())
-  const resolvedServiceType =
-    serviceType === "Otro" ? serviceTypeOther.trim() : serviceType
+  const resolvedServiceTypes = serviceTypes.map((type) =>
+    type === "Otro" ? serviceTypeOther.trim() : type
+  )
+  const resolvedServiceType = resolvedServiceTypes.join(", ")
+  const serviceQuantity = String(serviceTypes.length)
 
   function handleSelectService(label: string) {
     const service = serviceOptionsMap.get(label)
@@ -450,6 +453,7 @@ export default function ActionAgreementPage() {
     if (!coordinatorId || !selectedCoordinator?.signature) return
     if (clientSignMode === "now" && !clientSignature) return
     if (filledActivities.length === 0) return
+    if (serviceTypes.length === 0) return
 
     const signNow = clientSignMode === "now"
 
@@ -550,9 +554,8 @@ export default function ActionAgreementPage() {
     setSelectedServiceId("")
     setAdvisorId("")
     setProjectName("")
-    setServiceType("")
+    setServiceTypes([])
     setServiceTypeOther("")
-    setServiceQuantity("")
     setEstimatedCompletionTime("")
     setIdentifiedNeed("")
     setServiceScope("")
@@ -874,21 +877,15 @@ export default function ActionAgreementPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="serviceType">Tipo de servicio</Label>
-                    <Select
+                    <MultiCombobox
                       id="serviceType"
-                      value={serviceType}
-                      onChange={(event) => setServiceType(event.target.value)}
+                      options={[...serviceOptions, "Otro"]}
+                      values={serviceTypes}
+                      onValuesChange={setServiceTypes}
+                      placeholder="Selecciona uno o más tipos"
                       required
-                    >
-                      <option value="">Selecciona un tipo</option>
-                      {serviceOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                      <option value="Otro">Otro (especificar)</option>
-                    </Select>
-                    {serviceType === "Otro" && (
+                    />
+                    {serviceTypes.includes("Otro") && (
                       <Input
                         value={serviceTypeOther}
                         onChange={(event) =>
@@ -903,13 +900,7 @@ export default function ActionAgreementPage() {
                     <Label htmlFor="serviceQuantity">
                       Cantidad de servicio
                     </Label>
-                    <Input
-                      id="serviceQuantity"
-                      value={serviceQuantity}
-                      onChange={(event) =>
-                        setServiceQuantity(event.target.value)
-                      }
-                    />
+                    <Input id="serviceQuantity" value={serviceQuantity} disabled />
                   </div>
                 </div>
 

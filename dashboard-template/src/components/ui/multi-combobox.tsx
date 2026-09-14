@@ -161,13 +161,14 @@ export function MultiCombobox({
               filteredOptions.map((option) => (
                 <label
                   key={option}
-                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                  className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
                 >
                   <Checkbox
+                    className="mt-0.5"
                     checked={values.includes(option)}
                     onChange={() => toggleValue(option)}
                   />
-                  <span className="truncate">{option}</span>
+                  <span>{option}</span>
                 </label>
               ))
             )}

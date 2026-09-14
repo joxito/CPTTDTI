@@ -8,6 +8,7 @@ import {
   Check,
   Download,
   FileDown,
+  FileText,
   ImagePlus,
   Link as LinkIcon,
   Mail,
@@ -623,7 +624,14 @@ export default function ServicesPage() {
   const [deleteError, setDeleteError] = useState("")
   const [signLinkCopied, setSignLinkCopied] = useState(false)
   const [surveyLinkCopied, setSurveyLinkCopied] = useState(false)
-  const [idPhotoUrls, setIdPhotoUrls] = useState<string[] | null>(null)
+  const [cedulaLinkCopied, setCedulaLinkCopied] = useState(false)
+  const [idPhotoUrls, setIdPhotoUrls] = useState<
+    { url: string; path: string; isPdf: boolean }[] | null
+  >(null)
+  const [deletingIdPhotoPath, setDeletingIdPhotoPath] = useState<
+    string | null
+  >(null)
+  const [idPhotoDeleteError, setIdPhotoDeleteError] = useState("")
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [notesError, setNotesError] = useState("")
   const [newNoteBody, setNewNoteBody] = useState("")
@@ -711,6 +719,14 @@ export default function ServicesPage() {
     setTimeout(() => setCompletionSignLinkCopied(false), 2000)
   }
 
+  async function handleCopyCedulaLink() {
+    if (!selected) return
+    const url = `${window.location.origin}/subir-cedula/${selected.clients.id}`
+    await navigator.clipboard.writeText(url)
+    setCedulaLinkCopied(true)
+    setTimeout(() => setCedulaLinkCopied(false), 2000)
+  }
+
   async function handleExportServicePdf() {
     if (!selected) return
 
@@ -730,7 +746,7 @@ export default function ServicesPage() {
         selected,
         advisorName,
         coordinatorName,
-        idPhotoUrls ?? []
+        (idPhotoUrls ?? []).filter((photo) => !photo.isPdf).map((photo) => photo.url)
       )
       doc.save(`solicitud-servicio-${selected.clients.business_name}.pdf`)
     } catch {
@@ -1173,8 +1189,73 @@ export default function ServicesPage() {
 
     setIdPhotoUrls(
       data
-        .map((item) => item.signedUrl)
-        .filter((url): url is string => Boolean(url))
+        .filter(
+          (item): item is typeof item & { signedUrl: string; path: string } =>
+            Boolean(item.signedUrl && item.path)
+        )
+        .map((item) => ({
+          url: item.signedUrl,
+          path: item.path,
+          isPdf: item.path.toLowerCase().endsWith(".pdf"),
+        }))
+    )
+  }
+
+  // Borra una foto/PDF de cédula desde el modo de edición: quita el
+  // archivo del bucket y actualiza id_photo_paths en el cliente.
+  async function handleDeleteIdPhoto(path: string) {
+    if (!selected) return
+    setDeletingIdPhotoPath(path)
+    setIdPhotoDeleteError("")
+
+    const { error: removeError } = await supabase.storage
+      .from("cedulas")
+      .remove([path])
+
+    if (removeError) {
+      setDeletingIdPhotoPath(null)
+      setIdPhotoDeleteError("No pudimos eliminar el archivo. Intenta de nuevo.")
+      return
+    }
+
+    const remainingPaths = (selected.clients.id_photo_paths ?? []).filter(
+      (existingPath) => existingPath !== path
+    )
+    const nextPaths = remainingPaths.length > 0 ? remainingPaths : null
+
+    const { error: updateError } = await supabase
+      .from("clients")
+      .update({ id_photo_paths: nextPaths })
+      .eq("id", selected.client_id)
+
+    setDeletingIdPhotoPath(null)
+
+    if (updateError) {
+      setIdPhotoDeleteError("No pudimos actualizar el registro. Intenta de nuevo.")
+      return
+    }
+
+    setIdPhotoUrls((current) =>
+      current?.filter((photo) => photo.path !== path) ?? current
+    )
+    setSelected((current) =>
+      current
+        ? {
+            ...current,
+            clients: { ...current.clients, id_photo_paths: nextPaths },
+          }
+        : current
+    )
+    setRequests(
+      (current) =>
+        current?.map((request) =>
+          request.id === selected.id
+            ? {
+                ...request,
+                clients: { ...request.clients, id_photo_paths: nextPaths },
+              }
+            : request
+        ) ?? current
     )
   }
 
@@ -1770,7 +1851,7 @@ export default function ServicesPage() {
                   {exportServicePdfError}
                 </p>
               )}
-              <div className="flex flex-wrap justify-end gap-1.5 sm:flex-nowrap">
+              <div className="flex flex-wrap justify-end gap-1.5">
                 <Button
                   type="button"
                   variant="outline"
@@ -1797,6 +1878,26 @@ export default function ServicesPage() {
                       <>
                         <LinkIcon className="size-4" />
                         Firmar
+                      </>
+                    )}
+                  </Button>
+                )}
+                {idPhotoUrls !== null && idPhotoUrls.length === 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyCedulaLink}
+                  >
+                    {cedulaLinkCopied ? (
+                      <>
+                        <Check className="size-4" />
+                        Copiado
+                      </>
+                    ) : (
+                      <>
+                        <LinkIcon className="size-4" />
+                        Cédula
                       </>
                     )}
                   </Button>
@@ -1981,21 +2082,34 @@ export default function ServicesPage() {
               )}
               {idPhotoUrls !== null && idPhotoUrls.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {idPhotoUrls.map((url) => (
-                    <a
-                      key={url}
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block overflow-hidden rounded-lg border"
-                    >
-                      <img
-                        src={url}
-                        alt="Foto de cédula"
-                        className="h-28 w-40 object-cover"
-                      />
-                    </a>
-                  ))}
+                  {idPhotoUrls.map(({ url, path, isPdf }) =>
+                    isPdf ? (
+                      <a
+                        key={path}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex h-28 w-40 flex-col items-center justify-center gap-1.5 rounded-lg border text-muted-foreground hover:bg-muted"
+                      >
+                        <FileText className="size-6" />
+                        <span className="text-xs">Ver PDF</span>
+                      </a>
+                    ) : (
+                      <a
+                        key={path}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block overflow-hidden rounded-lg border"
+                      >
+                        <img
+                          src={url}
+                          alt="Foto de cédula"
+                          className="h-28 w-40 object-cover"
+                        />
+                      </a>
+                    )
+                  )}
                 </div>
               )}
             </div>
@@ -2410,6 +2524,56 @@ export default function ServicesPage() {
                 }
               />
             </div>
+
+            {idPhotoUrls !== null && idPhotoUrls.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Fotografías de la cédula</Label>
+                <div className="flex flex-wrap gap-2">
+                  {idPhotoUrls.map(({ url, path, isPdf }) => (
+                    <div key={path} className="relative">
+                      {isPdf ? (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex h-28 w-40 flex-col items-center justify-center gap-1.5 rounded-lg border text-muted-foreground hover:bg-muted"
+                        >
+                          <FileText className="size-6" />
+                          <span className="text-xs">Ver PDF</span>
+                        </a>
+                      ) : (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block overflow-hidden rounded-lg border"
+                        >
+                          <img
+                            src={url}
+                            alt="Foto de cédula"
+                            className="h-28 w-40 object-cover"
+                          />
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteIdPhoto(path)}
+                        disabled={deletingIdPhotoPath === path}
+                        aria-label="Eliminar foto de cédula"
+                        className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow hover:bg-destructive/90 disabled:opacity-50"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {idPhotoDeleteError && (
+                  <p className="text-xs text-destructive">
+                    {idPhotoDeleteError}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="edit-email">Correo Electrónico</Label>
