@@ -626,8 +626,12 @@ export default function ServicesPage() {
   const [surveyLinkCopied, setSurveyLinkCopied] = useState(false)
   const [cedulaLinkCopied, setCedulaLinkCopied] = useState(false)
   const [idPhotoUrls, setIdPhotoUrls] = useState<
-    { url: string; isPdf: boolean }[] | null
+    { url: string; path: string; isPdf: boolean }[] | null
   >(null)
+  const [deletingIdPhotoPath, setDeletingIdPhotoPath] = useState<
+    string | null
+  >(null)
+  const [idPhotoDeleteError, setIdPhotoDeleteError] = useState("")
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [notesError, setNotesError] = useState("")
   const [newNoteBody, setNewNoteBody] = useState("")
@@ -1185,13 +1189,73 @@ export default function ServicesPage() {
 
     setIdPhotoUrls(
       data
-        .filter((item): item is typeof item & { signedUrl: string } =>
-          Boolean(item.signedUrl)
+        .filter(
+          (item): item is typeof item & { signedUrl: string; path: string } =>
+            Boolean(item.signedUrl && item.path)
         )
         .map((item) => ({
           url: item.signedUrl,
-          isPdf: item.path?.toLowerCase().endsWith(".pdf") ?? false,
+          path: item.path,
+          isPdf: item.path.toLowerCase().endsWith(".pdf"),
         }))
+    )
+  }
+
+  // Borra una foto/PDF de cédula desde el modo de edición: quita el
+  // archivo del bucket y actualiza id_photo_paths en el cliente.
+  async function handleDeleteIdPhoto(path: string) {
+    if (!selected) return
+    setDeletingIdPhotoPath(path)
+    setIdPhotoDeleteError("")
+
+    const { error: removeError } = await supabase.storage
+      .from("cedulas")
+      .remove([path])
+
+    if (removeError) {
+      setDeletingIdPhotoPath(null)
+      setIdPhotoDeleteError("No pudimos eliminar el archivo. Intenta de nuevo.")
+      return
+    }
+
+    const remainingPaths = (selected.clients.id_photo_paths ?? []).filter(
+      (existingPath) => existingPath !== path
+    )
+    const nextPaths = remainingPaths.length > 0 ? remainingPaths : null
+
+    const { error: updateError } = await supabase
+      .from("clients")
+      .update({ id_photo_paths: nextPaths })
+      .eq("id", selected.client_id)
+
+    setDeletingIdPhotoPath(null)
+
+    if (updateError) {
+      setIdPhotoDeleteError("No pudimos actualizar el registro. Intenta de nuevo.")
+      return
+    }
+
+    setIdPhotoUrls((current) =>
+      current?.filter((photo) => photo.path !== path) ?? current
+    )
+    setSelected((current) =>
+      current
+        ? {
+            ...current,
+            clients: { ...current.clients, id_photo_paths: nextPaths },
+          }
+        : current
+    )
+    setRequests(
+      (current) =>
+        current?.map((request) =>
+          request.id === selected.id
+            ? {
+                ...request,
+                clients: { ...request.clients, id_photo_paths: nextPaths },
+              }
+            : request
+        ) ?? current
     )
   }
 
@@ -1818,6 +1882,26 @@ export default function ServicesPage() {
                     )}
                   </Button>
                 )}
+                {idPhotoUrls !== null && idPhotoUrls.length === 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyCedulaLink}
+                  >
+                    {cedulaLinkCopied ? (
+                      <>
+                        <Check className="size-4" />
+                        Copiado
+                      </>
+                    ) : (
+                      <>
+                        <LinkIcon className="size-4" />
+                        Cédula
+                      </>
+                    )}
+                  </Button>
+                )}
                 {selected && selected.status === "completo" && (
                   <Button
                     type="button"
@@ -1987,31 +2071,9 @@ export default function ServicesPage() {
               value={selected.clients.id_number}
             />
             <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Fotografías de la cédula
-                </span>
-                {idPhotoUrls !== null && idPhotoUrls.length === 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCopyCedulaLink}
-                  >
-                    {cedulaLinkCopied ? (
-                      <>
-                        <Check className="size-4" />
-                        Copiado
-                      </>
-                    ) : (
-                      <>
-                        <LinkIcon className="size-4" />
-                        Enviar enlace
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
+              <span className="text-xs font-medium text-muted-foreground">
+                Fotografías de la cédula
+              </span>
               {idPhotoUrls === null && (
                 <p className="text-xs text-muted-foreground">Cargando...</p>
               )}
@@ -2020,10 +2082,10 @@ export default function ServicesPage() {
               )}
               {idPhotoUrls !== null && idPhotoUrls.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {idPhotoUrls.map(({ url, isPdf }) =>
+                  {idPhotoUrls.map(({ url, path, isPdf }) =>
                     isPdf ? (
                       <a
-                        key={url}
+                        key={path}
                         href={url}
                         target="_blank"
                         rel="noreferrer"
@@ -2034,7 +2096,7 @@ export default function ServicesPage() {
                       </a>
                     ) : (
                       <a
-                        key={url}
+                        key={path}
                         href={url}
                         target="_blank"
                         rel="noreferrer"
@@ -2462,6 +2524,56 @@ export default function ServicesPage() {
                 }
               />
             </div>
+
+            {idPhotoUrls !== null && idPhotoUrls.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Fotografías de la cédula</Label>
+                <div className="flex flex-wrap gap-2">
+                  {idPhotoUrls.map(({ url, path, isPdf }) => (
+                    <div key={path} className="relative">
+                      {isPdf ? (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex h-28 w-40 flex-col items-center justify-center gap-1.5 rounded-lg border text-muted-foreground hover:bg-muted"
+                        >
+                          <FileText className="size-6" />
+                          <span className="text-xs">Ver PDF</span>
+                        </a>
+                      ) : (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block overflow-hidden rounded-lg border"
+                        >
+                          <img
+                            src={url}
+                            alt="Foto de cédula"
+                            className="h-28 w-40 object-cover"
+                          />
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteIdPhoto(path)}
+                        disabled={deletingIdPhotoPath === path}
+                        aria-label="Eliminar foto de cédula"
+                        className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow hover:bg-destructive/90 disabled:opacity-50"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {idPhotoDeleteError && (
+                  <p className="text-xs text-destructive">
+                    {idPhotoDeleteError}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="edit-email">Correo Electrónico</Label>
