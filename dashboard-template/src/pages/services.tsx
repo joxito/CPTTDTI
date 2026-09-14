@@ -8,6 +8,7 @@ import {
   Check,
   Download,
   FileDown,
+  FileText,
   ImagePlus,
   Link as LinkIcon,
   Mail,
@@ -623,7 +624,9 @@ export default function ServicesPage() {
   const [deleteError, setDeleteError] = useState("")
   const [signLinkCopied, setSignLinkCopied] = useState(false)
   const [surveyLinkCopied, setSurveyLinkCopied] = useState(false)
-  const [idPhotoUrls, setIdPhotoUrls] = useState<string[] | null>(null)
+  const [idPhotoUrls, setIdPhotoUrls] = useState<
+    { url: string; isPdf: boolean }[] | null
+  >(null)
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [notesError, setNotesError] = useState("")
   const [newNoteBody, setNewNoteBody] = useState("")
@@ -730,7 +733,7 @@ export default function ServicesPage() {
         selected,
         advisorName,
         coordinatorName,
-        idPhotoUrls ?? []
+        (idPhotoUrls ?? []).filter((photo) => !photo.isPdf).map((photo) => photo.url)
       )
       doc.save(`solicitud-servicio-${selected.clients.business_name}.pdf`)
     } catch {
@@ -1173,8 +1176,13 @@ export default function ServicesPage() {
 
     setIdPhotoUrls(
       data
-        .map((item) => item.signedUrl)
-        .filter((url): url is string => Boolean(url))
+        .filter((item): item is typeof item & { signedUrl: string } =>
+          Boolean(item.signedUrl)
+        )
+        .map((item) => ({
+          url: item.signedUrl,
+          isPdf: item.path?.toLowerCase().endsWith(".pdf") ?? false,
+        }))
     )
   }
 
@@ -1981,21 +1989,34 @@ export default function ServicesPage() {
               )}
               {idPhotoUrls !== null && idPhotoUrls.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {idPhotoUrls.map((url) => (
-                    <a
-                      key={url}
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block overflow-hidden rounded-lg border"
-                    >
-                      <img
-                        src={url}
-                        alt="Foto de cédula"
-                        className="h-28 w-40 object-cover"
-                      />
-                    </a>
-                  ))}
+                  {idPhotoUrls.map(({ url, isPdf }) =>
+                    isPdf ? (
+                      <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex h-28 w-40 flex-col items-center justify-center gap-1.5 rounded-lg border text-muted-foreground hover:bg-muted"
+                      >
+                        <FileText className="size-6" />
+                        <span className="text-xs">Ver PDF</span>
+                      </a>
+                    ) : (
+                      <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block overflow-hidden rounded-lg border"
+                      >
+                        <img
+                          src={url}
+                          alt="Foto de cédula"
+                          className="h-28 w-40 object-cover"
+                        />
+                      </a>
+                    )
+                  )}
                 </div>
               )}
             </div>

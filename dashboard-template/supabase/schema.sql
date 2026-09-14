@@ -335,7 +335,7 @@ grant execute on function find_or_create_client(jsonb) to anon, authenticated;
 -- Bucket privado para las fotos de cédula: cualquiera puede subir desde
 -- el formulario público, solo el staff logueado puede verlas.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('cedulas', 'cedulas', false, 8388608, array['image/jpeg', 'image/png', 'image/webp', 'image/heic'])
+values ('cedulas', 'cedulas', false, 8388608, array['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'])
 on conflict (id) do nothing;
 
 create policy "Cualquiera puede subir fotos de cédula"
