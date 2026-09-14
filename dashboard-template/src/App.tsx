@@ -15,6 +15,7 @@ import ActionAgreementPage from "@/pages/action-agreement"
 import SignRequestPage from "@/pages/sign-request"
 import SignActionAgreementPage from "@/pages/sign-action-agreement"
 import SignCompletionAgreementPage from "@/pages/sign-completion-agreement"
+import UploadIdPhotosPage from "@/pages/upload-id-photos"
 import LoginPage from "@/pages/login"
 
 export default function App() {
@@ -65,6 +66,7 @@ export default function App() {
         path="/firmar-acuerdo-finalizacion/:id"
         element={<SignCompletionAgreementPage />}
       />
+      <Route path="/subir-cedula/:clientId" element={<UploadIdPhotosPage />} />
     </Routes>
   )
 }

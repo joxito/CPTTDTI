@@ -624,6 +624,7 @@ export default function ServicesPage() {
   const [deleteError, setDeleteError] = useState("")
   const [signLinkCopied, setSignLinkCopied] = useState(false)
   const [surveyLinkCopied, setSurveyLinkCopied] = useState(false)
+  const [cedulaLinkCopied, setCedulaLinkCopied] = useState(false)
   const [idPhotoUrls, setIdPhotoUrls] = useState<
     { url: string; isPdf: boolean }[] | null
   >(null)
@@ -712,6 +713,14 @@ export default function ServicesPage() {
     await navigator.clipboard.writeText(url)
     setCompletionSignLinkCopied(true)
     setTimeout(() => setCompletionSignLinkCopied(false), 2000)
+  }
+
+  async function handleCopyCedulaLink() {
+    if (!selected) return
+    const url = `${window.location.origin}/subir-cedula/${selected.clients.id}`
+    await navigator.clipboard.writeText(url)
+    setCedulaLinkCopied(true)
+    setTimeout(() => setCedulaLinkCopied(false), 2000)
   }
 
   async function handleExportServicePdf() {
@@ -1978,9 +1987,29 @@ export default function ServicesPage() {
               value={selected.clients.id_number}
             />
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">
-                Fotografías de la cédula
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Fotografías de la cédula
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyCedulaLink}
+                >
+                  {cedulaLinkCopied ? (
+                    <>
+                      <Check className="size-4" />
+                      Copiado
+                    </>
+                  ) : (
+                    <>
+                      <LinkIcon className="size-4" />
+                      Enviar enlace
+                    </>
+                  )}
+                </Button>
+              </div>
               {idPhotoUrls === null && (
                 <p className="text-xs text-muted-foreground">Cargando...</p>
               )}
