@@ -1851,7 +1851,7 @@ export default function ServicesPage() {
                   {exportServicePdfError}
                 </p>
               )}
-              <div className="flex flex-wrap justify-end gap-1.5 sm:flex-nowrap">
+              <div className="flex flex-wrap justify-end gap-1.5">
                 <Button
                   type="button"
                   variant="outline"
