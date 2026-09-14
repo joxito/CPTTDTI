@@ -1991,24 +1991,26 @@ export default function ServicesPage() {
                 <span className="text-xs font-medium text-muted-foreground">
                   Fotografías de la cédula
                 </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyCedulaLink}
-                >
-                  {cedulaLinkCopied ? (
-                    <>
-                      <Check className="size-4" />
-                      Copiado
-                    </>
-                  ) : (
-                    <>
-                      <LinkIcon className="size-4" />
-                      Enviar enlace
-                    </>
-                  )}
-                </Button>
+                {idPhotoUrls !== null && idPhotoUrls.length === 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyCedulaLink}
+                  >
+                    {cedulaLinkCopied ? (
+                      <>
+                        <Check className="size-4" />
+                        Copiado
+                      </>
+                    ) : (
+                      <>
+                        <LinkIcon className="size-4" />
+                        Enviar enlace
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
               {idPhotoUrls === null && (
                 <p className="text-xs text-muted-foreground">Cargando...</p>
