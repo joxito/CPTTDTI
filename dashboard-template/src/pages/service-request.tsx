@@ -825,23 +825,26 @@ export default function ServiceRequestPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-5 pt-6 pb-6">
-            <p className="text-justify text-sm text-muted-foreground">
-              Yo declaro bajo juramento que la información proporcionada es
-              verídica. Yo estoy de acuerdo en participar si soy seleccionado
-              para contestar la encuesta de evaluación de los servicios de
-              asesoría recibidos del Centro de Prototipado y Transferencia
-              Tecnológica. Autorizo al MICM y al Centro de Prototipado y
-              Transferencia Tecnológica el uso de mi nombre y domicilio para
-              las encuestas de MICM. Yo autorizo al Centro de Prototipado y
-              Transferencia Tecnológica para proporcionar la información
-              relevante al asesor(a) asignado. Yo entiendo que el asesor(a) ha
-              acordado: 1) no recomendar servicios o bienes en el cual tenga
-              interés personal. 2) no aceptar comisiones o pagos por el
-              asesoramiento. Yo acepto dar un aporte empresarial en aquellos
-              servicios que me ofrezca el Centro de Prototipado y
-              Transferencia Tecnológica y que tengan un costo para mí como
-              empresario.
-            </p>
+            <div className="flex flex-col gap-1.5">
+              <Label>Acuerdo</Label>
+              <p className="text-justify text-sm text-muted-foreground">
+                Yo declaro, bajo juramento, que la información proporcionada
+                es verídica. Estoy de acuerdo en participar, si soy
+                seleccionado(a), en la encuesta de evaluación de los
+                servicios de asesoría recibidos del Centro de Prototipado y
+                Transferencia Tecnológica. Autorizo al MICM y al Centro de
+                Prototipado y Transferencia Tecnológica a utilizar mi nombre
+                y domicilio para las encuestas del MICM. Autorizo al Centro
+                de Prototipado y Transferencia Tecnológica a proporcionar la
+                información relevante al asesor(a) asignado(a). Entiendo que
+                el asesor(a) ha acordado: 1) no recomendar servicios o bienes
+                en los cuales tenga interés personal; y 2) no aceptar
+                comisiones ni pagos por el asesoramiento. Acepto realizar un
+                aporte empresarial por aquellos servicios que me ofrezca el
+                Centro de Prototipado y Transferencia Tecnológica y que
+                tengan un costo para mí como empresario(a).
+              </p>
+            </div>
 
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="confidentiality">
@@ -851,18 +854,19 @@ export default function ServiceRequestPage({
                 El Centro de Prototipado y Transferencia Tecnológica
                 mantendrá estricta confidencialidad e imparcialidad durante
                 la ejecución de los trabajos aquí descritos, así como al
-                término de los mismos. De la misma manera, las informaciones
-                a las que el Centro de Prototipado y Transferencia
-                Tecnológica tendrá acceso directa o indirectamente quedarán
-                sujetas a esta cláusula. El Centro de Prototipado y
-                Transferencia Tecnológica exigirá compromisos de
-                confidencialidad e imparcialidad similares a terceros,
-                auditores y a los que el centro tenga que involucrar para el
-                cumplimiento de los objetivos de esta propuesta. En caso de
-                requerimiento de tipo judicial, ordenado por un juez
+                término de estos. De la misma manera, la información a la
+                que el Centro de Prototipado y Transferencia Tecnológica
+                tenga acceso, directa o indirectamente, quedará sujeta a
+                esta cláusula. El Centro de Prototipado y Transferencia
+                Tecnológica exigirá compromisos de confidencialidad e
+                imparcialidad similares a terceros, auditores y demás
+                personas o entidades que el Centro tenga que involucrar
+                para el cumplimiento de los objetivos de esta propuesta. En
+                caso de requerimiento de tipo judicial, ordenado por un juez
                 competente, el Centro de Prototipado y Transferencia
-                Tecnológica quedará liberado de dicha confidencialidad y se
-                contactará al cliente para informarle.
+                Tecnológica quedará liberado de dicha obligación de
+                confidencialidad y se contactará al cliente para
+                informarle.
               </p>
               <Select
                 id="confidentiality"
