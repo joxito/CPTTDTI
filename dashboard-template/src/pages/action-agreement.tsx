@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import jsPDF from "jspdf"
-import { Check, FileDown, Link as LinkIcon } from "lucide-react"
+import { FileDown } from "lucide-react"
 
 import {
   Card,
@@ -15,7 +15,6 @@ import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Combobox } from "@/components/ui/combobox"
 import { MultiCombobox } from "@/components/ui/multi-combobox"
-import { SignatureCanvas } from "@/components/ui/signature-canvas"
 import { serviceOptions } from "@/data/service-request-options"
 import { CREATOR_EMAIL, useAuth } from "@/hooks/use-auth"
 import { supabase } from "@/lib/supabase"
@@ -103,7 +102,6 @@ type SubmittedAgreement = {
   advisorSignature: string
   coordinatorName: string
   coordinatorSignature: string
-  clientSignature: string
   agreementDate: string
 }
 
@@ -123,7 +121,6 @@ export type ActionAgreementPdfData = {
   advisorSignature: string
   coordinatorName: string
   coordinatorSignature: string
-  clientSignature: string
   agreementDate: string
 }
 
@@ -249,13 +246,12 @@ export async function buildActionAgreementPdf(
   fullWidthCursor.y += considerationsLines.length * 3.2 + 6
 
   addSectionTitle(fullWidthCursor, "Firmas", contentWidth)
-  const sigColWidth = (contentWidth - 16) / 3
+  const sigColWidth = (contentWidth - 8) / 2
   const sigHeight = 16
   const sigWidth = Math.min(sigHeight * (500 / 200), sigColWidth)
   ensureSpace(fullWidthCursor, sigHeight + 12)
 
   const sigCols = [
-    { label: "Cliente", name: null, signature: agreement.clientSignature },
     {
       label: "Asesor(a)",
       name: agreement.advisorName,
@@ -273,11 +269,9 @@ export async function buildActionAgreementPdf(
     doc.setFont("helvetica", "bold")
     doc.setFontSize(8)
     doc.text(col.label, x, fullWidthCursor.y)
-    if (col.name) {
-      doc.setFont("helvetica", "normal")
-      doc.setFontSize(7.5)
-      doc.text(col.name, x, fullWidthCursor.y + 3.5)
-    }
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(7.5)
+    doc.text(col.name, x, fullWidthCursor.y + 3.5)
     doc.addImage(
       col.signature,
       "PNG",
@@ -343,14 +337,10 @@ export default function ActionAgreementPage() {
     { ...emptyActivity },
     { ...emptyActivity },
   ])
-  const [clientSignature, setClientSignature] = useState("")
-  const [clientSignMode, setClientSignMode] = useState<"now" | "link">("now")
   const [agreementDate, setAgreementDate] = useState(todayIso())
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submitted, setSubmitted] = useState<SubmittedAgreement | null>(null)
-  const [linkAgreementId, setLinkAgreementId] = useState<string | null>(null)
-  const [signLinkCopied, setSignLinkCopied] = useState(false)
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const [pdfError, setPdfError] = useState("")
 
@@ -451,11 +441,8 @@ export default function ActionAgreementPage() {
     event.preventDefault()
     if (!selectedService || !advisorId || !selectedAdvisor?.signature) return
     if (!coordinatorId || !selectedCoordinator?.signature) return
-    if (clientSignMode === "now" && !clientSignature) return
     if (filledActivities.length === 0) return
     if (serviceTypes.length === 0) return
-
-    const signNow = clientSignMode === "now"
 
     setSubmitting(true)
     setSubmitError("")
@@ -482,7 +469,6 @@ export default function ActionAgreementPage() {
         advisor_signature: selectedAdvisor.signature,
         coordinator_name: selectedCoordinator.name,
         coordinator_signature: selectedCoordinator.signature,
-        client_signature: signNow ? clientSignature : null,
         agreement_date: agreementDate,
       })
       .select("id")
@@ -496,16 +482,8 @@ export default function ActionAgreementPage() {
       return
     }
 
-    if (!signNow) {
-      // La firma queda pendiente por enlace — el servicio no avanza de
-      // etapa hasta que el cliente firme (ver sign_action_agreement).
-      setSubmitting(false)
-      setLinkAgreementId(data.id)
-      return
-    }
-
-    // El acuerdo firmado es lo único que puede mover un servicio a "En
-    // proceso" — no hay forma de ponerlo así a mano desde Servicios.
+    // El acuerdo es lo único que puede mover un servicio a "En proceso" —
+    // no hay forma de ponerlo así a mano desde Servicios.
     await supabase
       .from("service_requests")
       .update({ status: "en_proceso" })
@@ -536,17 +514,8 @@ export default function ActionAgreementPage() {
       advisorSignature: selectedAdvisor.signature,
       coordinatorName: selectedCoordinator.name,
       coordinatorSignature: selectedCoordinator.signature,
-      clientSignature,
       agreementDate,
     })
-  }
-
-  async function handleCopySignLink() {
-    if (!linkAgreementId) return
-    const url = `${window.location.origin}/firmar-acuerdo-acciones/${linkAgreementId}`
-    await navigator.clipboard.writeText(url)
-    setSignLinkCopied(true)
-    setTimeout(() => setSignLinkCopied(false), 2000)
   }
 
   function handleNewAgreement() {
@@ -563,9 +532,6 @@ export default function ActionAgreementPage() {
     setAgreements("")
     setActivities([{ ...emptyActivity }, { ...emptyActivity }, { ...emptyActivity }])
     setCoordinatorId("")
-    setClientSignature("")
-    setClientSignMode("now")
-    setLinkAgreementId(null)
     setAgreementDate(todayIso())
   }
 
@@ -592,7 +558,6 @@ export default function ActionAgreementPage() {
         advisorSignature: submitted.advisorSignature,
         coordinatorName: submitted.coordinatorName,
         coordinatorSignature: submitted.coordinatorSignature,
-        clientSignature: submitted.clientSignature,
         agreementDate: submitted.agreementDate,
       })
       doc.save(`acuerdo-acciones-${submitted.service.business_name}.pdf`)
@@ -601,49 +566,6 @@ export default function ActionAgreementPage() {
     }
 
     setGeneratingPdf(false)
-  }
-
-  if (linkAgreementId) {
-    return (
-      <div className="mx-auto flex max-w-2xl flex-col gap-6">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Acuerdo de Acciones del Proyecto
-        </h1>
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-success/10 text-success">
-              <LinkIcon className="size-5" />
-            </div>
-            <CardDescription>
-              Acuerdo guardado. Envía este enlace al cliente para que revise
-              la información y firme. El servicio pasará a "En proceso" en
-              cuanto firme.
-            </CardDescription>
-            <Button type="button" variant="outline" onClick={handleCopySignLink}>
-              {signLinkCopied ? (
-                <>
-                  <Check className="size-4" />
-                  Enlace copiado
-                </>
-              ) : (
-                <>
-                  <LinkIcon className="size-4" />
-                  Copiar enlace de firma
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleNewAgreement}
-          className="self-start"
-        >
-          Crear otro acuerdo
-        </Button>
-      </div>
-    )
   }
 
   if (submitted) {
@@ -757,16 +679,7 @@ export default function ActionAgreementPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 border-t pt-4">
-              <div className="flex flex-col gap-1">
-                <p className="text-sm font-medium">Cliente</p>
-                <img
-                  src={submitted.clientSignature}
-                  alt="Firma del cliente"
-                  className="-mb-3 h-14 self-center object-contain"
-                />
-                <div className="border-t" />
-              </div>
+            <div className="grid grid-cols-2 gap-4 border-t pt-4">
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium">Asesor(a)</p>
                 <p className="text-xs text-muted-foreground">
@@ -1124,46 +1037,6 @@ export default function ActionAgreementPage() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <Label>Firma Cliente</Label>
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setClientSignMode("now")}
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                        clientSignMode === "now"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground hover:bg-muted/70"
-                      }`}
-                    >
-                      Firmar ahora
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setClientSignMode("link")}
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                        clientSignMode === "link"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground hover:bg-muted/70"
-                      }`}
-                    >
-                      Enviar enlace
-                    </button>
-                  </div>
-                  {clientSignMode === "now" ? (
-                    <SignatureCanvas
-                      value={clientSignature}
-                      onChange={setClientSignature}
-                    />
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Al guardar, se genera un enlace para que el cliente
-                      revise el acuerdo y firme después. El servicio no pasa
-                      a "En proceso" hasta que firme.
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-1.5">
                   <Label htmlFor="agreementDate">Fecha</Label>
                   <Input
                     id="agreementDate"
@@ -1192,7 +1065,6 @@ export default function ActionAgreementPage() {
             !selectedAdvisor?.signature ||
             !coordinatorId ||
             !selectedCoordinator?.signature ||
-            (clientSignMode === "now" && !clientSignature) ||
             filledActivities.length === 0
           }
           className="self-end"
