@@ -1185,24 +1185,18 @@ export default function ServicesPage() {
     setRequests(data as unknown as ServiceRequest[])
   }
 
-  // Servicios con un Acuerdo de Acciones o de Finalización cuya firma del
-  // cliente sigue pendiente -- se marca en la tarjeta para no tener que
-  // abrir cada servicio para saberlo (ver el aviso ámbar en el detalle).
+  // Servicios con un Acuerdo de Finalización cuya firma del cliente sigue
+  // pendiente -- se marca en la tarjeta para no tener que abrir cada
+  // servicio para saberlo (ver el aviso ámbar en el detalle). El Acuerdo
+  // de Acciones ya no tiene firma del cliente, así que no aplica aquí.
   async function loadPendingAgreementIds() {
-    const [actionResult, completionResult] = await Promise.all([
-      supabase
-        .from("project_action_agreements")
-        .select("service_request_id")
-        .is("client_signature", null),
-      supabase
-        .from("completion_agreements")
-        .select("service_request_id")
-        .is("client_signature", null),
-    ])
+    const { data } = await supabase
+      .from("completion_agreements")
+      .select("service_request_id")
+      .is("client_signature", null)
 
     const ids = new Set<string>()
-    for (const row of actionResult.data ?? []) ids.add(row.service_request_id)
-    for (const row of completionResult.data ?? []) ids.add(row.service_request_id)
+    for (const row of data ?? []) ids.add(row.service_request_id)
     setPendingAgreementIds(ids)
   }
 
