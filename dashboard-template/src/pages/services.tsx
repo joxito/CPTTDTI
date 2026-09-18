@@ -1121,7 +1121,7 @@ export default function ServicesPage() {
         "Nombre de la Mipyme asistida": client.business_name,
         "RNC/Cédula": client.rnc_number || client.id_number,
         Necesidad: activity.description,
-        "Vía de Asistencia": "Presencial",
+        "Vía de Asistencia": "",
         "Asistencia brindada ": "Asistencia Técnica Especializada",
         "Tema del Servicio ":
           serviceTypes[index] ?? serviceTypes[serviceTypes.length - 1] ?? "",
