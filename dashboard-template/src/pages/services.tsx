@@ -1109,14 +1109,22 @@ export default function ServicesPage() {
         end_date: string
         responsible: string
       }[]
+      // Los tipos de servicio se guardan en el mismo orden en que se
+      // agregaron las actividades, así que se emparejan por posición; si
+      // hay menos tipos que actividades, se repite el último.
+      const serviceTypes = (agreement.service_type as string)
+        .split(",")
+        .map((type: string) => type.trim())
+        .filter(Boolean)
 
-      return activities.map((activity) => ({
+      return activities.map((activity, index) => ({
         "Nombre de la Mipyme asistida": client.business_name,
         "RNC/Cédula": client.rnc_number || client.id_number,
-        Necesidad: agreement.identified_need,
-        "Vía de Asistencia": "",
-        "Asistencia brindada ": agreement.service_type,
-        "Tema del Servicio ": activity.description,
+        Necesidad: activity.description,
+        "Vía de Asistencia": "Presencial",
+        "Asistencia brindada ": "Asistencia Técnica Especializada",
+        "Tema del Servicio ":
+          serviceTypes[index] ?? serviceTypes[serviceTypes.length - 1] ?? "",
         Mes: activity.start_date
           ? monthNameFromDate(activity.start_date)
           : monthNameFromDate(agreement.agreement_date),
