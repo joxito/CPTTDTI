@@ -602,6 +602,7 @@ export default function ServicesPage() {
     { id: string; name: string; email: string; role: string }[]
   >([])
   const [exportChoiceOpen, setExportChoiceOpen] = useState(false)
+  const [exportingAsistencias, setExportingAsistencias] = useState(false)
   const [error, setError] = useState("")
   const [query, setQuery] = useState("")
   const [dateFrom, setDateFrom] = useState("")
@@ -1072,10 +1073,91 @@ export default function ServicesPage() {
     )
   }
 
-  function handleExportChoice(format: "mipymes" | "actividad") {
-    setExportChoiceOpen(false)
-    if (format === "mipymes") handleExportMipymesAsistidas()
-    else handleExportActividadEconomica()
+  // Una fila por cada actividad del Plan de Acción (Acuerdo de Acciones) de
+  // los servicios filtrados -- misma idea que las otras dos exportaciones,
+  // calcada de la pestaña "Asistencias" de la plantilla oficial.
+  async function handleExportAsistencias() {
+    if (!filteredRequests || filteredRequests.length === 0) return
+
+    setExportingAsistencias(true)
+
+    const { data: agreements } = await supabase
+      .from("project_action_agreements")
+      .select(
+        "service_request_id, service_type, identified_need, agreement_date, advisor_id, activities"
+      )
+      .in(
+        "service_request_id",
+        filteredRequests.map((request) => request.id)
+      )
+
+    const requestById = new Map(
+      filteredRequests.map((request) => [request.id, request])
+    )
+
+    const rows = (agreements ?? []).flatMap((agreement) => {
+      const request = requestById.get(agreement.service_request_id)
+      if (!request) return []
+
+      const client = request.clients
+      const advisor = staffOptions.find(
+        (option) => option.id === agreement.advisor_id
+      )
+      const activities = (agreement.activities ?? []) as {
+        description: string
+        start_date: string
+        end_date: string
+        responsible: string
+      }[]
+      // Los tipos de servicio se guardan en el mismo orden en que se
+      // agregaron las actividades, así que se emparejan por posición; si
+      // hay menos tipos que actividades, se repite el último.
+      const serviceTypes = (agreement.service_type as string)
+        .split(",")
+        .map((type: string) => type.trim())
+        .filter(Boolean)
+
+      return activities.map((activity, index) => ({
+        "Nombre de la Mipyme asistida": client.business_name,
+        "RNC/Cédula": client.rnc_number || client.id_number,
+        Necesidad: activity.description,
+        "Vía de Asistencia": "",
+        "Asistencia brindada ": "Asistencia Técnica Especializada",
+        "Tema del Servicio ":
+          serviceTypes[index] ?? serviceTypes[serviceTypes.length - 1] ?? "",
+        Mes: activity.start_date
+          ? monthNameFromDate(activity.start_date)
+          : monthNameFromDate(agreement.agreement_date),
+        "Fecha de solicitud de la asistencia técnica": activity.start_date,
+        "Fecha de finalización  de la asistencia técnica ": activity.end_date,
+        "División/Centro": "LOYOLA y CPTT",
+        "Nombre del asesor/empleado que brindó la asistencia":
+          advisor?.name ?? activity.responsible ?? "",
+      }))
+    })
+
+    setExportingAsistencias(false)
+
+    if (rows.length === 0) return
+
+    const from = dateFrom || "todas"
+    const to = dateTo || "todas"
+    downloadXlsx(rows, `asistencias_${from}_a_${to}.xlsx`, "Asistencias")
+  }
+
+  async function handleExportChoice(
+    format: "mipymes" | "actividad" | "asistencias"
+  ) {
+    if (format === "mipymes") {
+      setExportChoiceOpen(false)
+      handleExportMipymesAsistidas()
+    } else if (format === "actividad") {
+      setExportChoiceOpen(false)
+      handleExportActividadEconomica()
+    } else {
+      await handleExportAsistencias()
+      setExportChoiceOpen(false)
+    }
   }
 
   async function handleCopySignLink() {
@@ -1111,24 +1193,18 @@ export default function ServicesPage() {
     setRequests(data as unknown as ServiceRequest[])
   }
 
-  // Servicios con un Acuerdo de Acciones o de Finalización cuya firma del
-  // cliente sigue pendiente -- se marca en la tarjeta para no tener que
-  // abrir cada servicio para saberlo (ver el aviso ámbar en el detalle).
+  // Servicios con un Acuerdo de Finalización cuya firma del cliente sigue
+  // pendiente -- se marca en la tarjeta para no tener que abrir cada
+  // servicio para saberlo (ver el aviso ámbar en el detalle). El Acuerdo
+  // de Acciones ya no tiene firma del cliente, así que no aplica aquí.
   async function loadPendingAgreementIds() {
-    const [actionResult, completionResult] = await Promise.all([
-      supabase
-        .from("project_action_agreements")
-        .select("service_request_id")
-        .is("client_signature", null),
-      supabase
-        .from("completion_agreements")
-        .select("service_request_id")
-        .is("client_signature", null),
-    ])
+    const { data } = await supabase
+      .from("completion_agreements")
+      .select("service_request_id")
+      .is("client_signature", null)
 
     const ids = new Set<string>()
-    for (const row of actionResult.data ?? []) ids.add(row.service_request_id)
-    for (const row of completionResult.data ?? []) ids.add(row.service_request_id)
+    for (const row of data ?? []) ids.add(row.service_request_id)
     setPendingAgreementIds(ids)
   }
 
@@ -2708,11 +2784,21 @@ export default function ServicesPage() {
               >
                 Actividad Económica
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start"
+                disabled={exportingAsistencias}
+                onClick={() => handleExportChoice("asistencias")}
+              >
+                {exportingAsistencias ? "Generando..." : "Asistencias"}
+              </Button>
             </div>
             <div className="mt-4 flex justify-end">
               <Button
                 type="button"
                 variant="ghost"
+                disabled={exportingAsistencias}
                 onClick={() => setExportChoiceOpen(false)}
               >
                 Cancelar
